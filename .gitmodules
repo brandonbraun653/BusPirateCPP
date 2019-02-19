@@ -1,0 +1,3 @@
+[submodule "lib/Chimera"]
+	path = lib/Chimera
+	url = git@github.com:brandonbraun653/Chimera.git
