@@ -114,6 +114,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalLibraryDirectories>$(BOOST_ROOT)\boost_1_68_0\stage\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -156,6 +157,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalLibraryDirectories>$(BOOST_ROOT)\boost_1_68_0\stage\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -163,6 +165,24 @@
     <ClInclude Include="..\..\..\..\src\chimeraPort.hpp" />
     <ClInclude Include="..\..\..\..\src\serial_driver.hpp" />
     <ClInclude Include="pch.h" />
+    <ClCompile Include="..\..\..\..\lib\Chimera\Chimera\chimera.cpp" />
+    <ClCompile Include="..\..\..\..\lib\Chimera\Chimera\logging.cpp" />
+    <ClCompile Include="..\..\..\..\lib\Chimera\Chimera\threading.cpp" />
+    <ClInclude Include="..\..\..\..\lib\Chimera\Chimera\assertion.hpp" />
+    <ClInclude Include="..\..\..\..\lib\Chimera\Chimera\chimera.hpp" />
+    <ClInclude Include="..\..\..\..\lib\Chimera\Chimera\clock.hpp" />
+    <ClInclude Include="..\..\..\..\lib\Chimera\Chimera\config.hpp" />
+    <ClInclude Include="..\..\..\..\lib\Chimera\Chimera\gpio.hpp" />
+    <ClInclude Include="..\..\..\..\lib\Chimera\Chimera\interface.hpp" />
+    <ClInclude Include="..\..\..\..\lib\Chimera\Chimera\logging.hpp" />
+    <ClInclude Include="..\..\..\..\lib\Chimera\Chimera\preprocessor.hpp" />
+    <ClInclude Include="..\..\..\..\lib\Chimera\Chimera\serial.hpp" />
+    <ClInclude Include="..\..\..\..\lib\Chimera\Chimera\spi.hpp" />
+    <ClInclude Include="..\..\..\..\lib\Chimera\Chimera\system.hpp" />
+    <ClInclude Include="..\..\..\..\lib\Chimera\Chimera\threading.hpp" />
+    <ClInclude Include="..\..\..\..\lib\Chimera\Chimera\types.hpp" />
+    <ClInclude Include="..\..\..\..\lib\Chimera\Chimera\utilities.hpp" />
+    <ClInclude Include="..\..\..\..\lib\Chimera\Chimera\watchdog.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\..\..\src\bp_spi.cpp" />

@@ -12,9 +12,6 @@
 #ifndef CHIMERA_PORT_HPP
 #define CHIMERA_PORT_HPP
 
-#include "bp_spi.hpp"
 
-
-#define CHIMERA_INHERITED_SERIAL BPSpi
 
 #endif  /* !CHIMERA_PORT_HPP */
