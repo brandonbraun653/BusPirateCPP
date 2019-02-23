@@ -27,27 +27,87 @@
 
 namespace HWInterface
 {
-  class BusPirate;
-  typedef std::shared_ptr<BusPirate> BusPirate_sPtr;
-  typedef std::unique_ptr<BusPirate> BusPirate_uPtr;
-
-  class BusPirate
+  namespace BusPirate
   {
-  public:
-    BusPirate(std::string &devicePort);
-    ~BusPirate() = default;
+    class Device;
+    using Device_sPtr = std::shared_ptr<Device>;
+    using Device_uPtr = std::unique_ptr<Device>;
 
 
+    class Commands
+    {
+    public:
+      static constexpr auto info = "i\n";
+    };
+
+    class Device
+    {
+    public:
+      struct Info
+      {
+        std::string boardVer;
+        std::string firmwareVer;
+        std::string bootLoaderVer;
+        std::string deviceID;
+        std::string revID;
+        std::string mcuVer;
+
+        Info()
+        {
+          boardVer      = "N/A";
+          bootLoaderVer = "N/A";
+          deviceID      = "N/A";
+          firmwareVer   = "N/A";
+          mcuVer        = "N/A";
+          revID         = "N/A";
+        }
+      };
+
+      Device( std::string &devicePort );
+      ~Device() = default;
+
+      /**
+       *  Opens a connection to the device.
+       *
+       *  @return True if connected, false if not
+       */
+      bool open();
+
+      /**
+       *  Closes the connection to the device.
+       *
+       *  @return void
+       */
+      void close();
+
+      /**
+       *  Gets the device information
+       *
+       *  @return Struct containing the device info
+       */
+      Info getInfo();
 
 
-  protected:
-    SerialDriver_sPtr serial;
-  
-  private:
+      /**
+       *	Sends a command to the device and returns the response
+       *
+       *	@param[in]	cmd     Command to be sent
+       *	@return std::string
+       */
+      std::string sendCommand( std::string &cmd );
 
-  };
 
-}
+    protected:
+      SerialDriver_sPtr serial;
+
+      boost::regex delimiter_regex{ "(HiZ>)" };   /**< Matches the BusPirate terminal "end" character sequence */
+
+    private:
+      bool is_open;
+    };
+  }    // namespace BusPirate
+
+}    // namespace HWInterface
 
 
 #endif /* !BUS_PIRATE_HPP */

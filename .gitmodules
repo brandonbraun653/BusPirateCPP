@@ -1,3 +1,6 @@
 [submodule "lib/Chimera"]
 	path = lib/Chimera
 	url = git@github.com:brandonbraun653/Chimera.git
+[submodule "lib/strtk"]
+	path = lib/strtk
+	url = https://github.com/ArashPartow/strtk.git

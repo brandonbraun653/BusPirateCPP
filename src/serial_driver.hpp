@@ -17,6 +17,7 @@
 
 /* Boost Includes */
 #include <boost/asio.hpp>
+#include <boost/regex.hpp>
 
 /* Chimera Includes */
 #include <Chimera/interface.hpp>
@@ -34,12 +35,15 @@ namespace HWInterface
     SerialDriver( std::string &device );
     ~SerialDriver() = default;
 
-    Chimera::Serial::Status begin( const Chimera::Serial::Modes txMode, const Chimera::Serial::Modes rxMode ) override;
-    Chimera::Serial::Status configure( const uint32_t baud,
-                                       const Chimera::Serial::CharWid width,
-                                       const Chimera::Serial::Parity parity,
-                                       const Chimera::Serial::StopBits stop,
-                                       const Chimera::Serial::FlowControl flow ) override;
+    Chimera::Serial::Status begin( const Chimera::Serial::Modes txMode = Chimera::Serial::Modes::BLOCKING,
+                                   const Chimera::Serial::Modes rxMode = Chimera::Serial::Modes::BLOCKING ) override;
+
+    Chimera::Serial::Status
+        configure( const uint32_t baud                     = 115200,
+                   const Chimera::Serial::CharWid width    = Chimera::Serial::CharWid::CW_8BIT,
+                   const Chimera::Serial::Parity parity    = Chimera::Serial::Parity::PAR_NONE,
+                   const Chimera::Serial::StopBits stop    = Chimera::Serial::StopBits::SBITS_ONE,
+                   const Chimera::Serial::FlowControl flow = Chimera::Serial::FlowControl::FCTRL_NONE ) override;
 
     Chimera::Serial::Status end() override;
 
@@ -51,26 +55,37 @@ namespace HWInterface
 
     Chimera::Serial::Status read( uint8_t *const buffer, const size_t length, const uint32_t timeout_mS = 500 ) override;
 
+    /**
+     *
+     *
+     *	@param[in]	buffer
+     *	@param[in]	length
+     *	@param[in]	expr
+     *	@param[in]	bytesTransferred
+     *	@param[in]	timeout_mS
+     *	@return Chimera::Serial::Status
+     */
+    Chimera::Serial::Status readUntil( std::vector<uint8_t> &buffer,
+                                       const boost::regex &expr,
+                                       const uint32_t timeout_mS = 500 );
+
   private:
-    typedef std::shared_ptr<boost::asio::deadline_timer> DeadlineTimer_sPtr;
-    typedef std::shared_ptr<boost::asio::serial_port> SerialPort_sPtr;
-
-    boost::asio::io_context ioService;
-
-    DeadlineTimer_sPtr timer;
-    SerialPort_sPtr serial;
     std::string serialDevice;
+
+
+    boost::asio::io_service io;
+    boost::asio::serial_port serialPort;
+    boost::asio::deadline_timer timer;
+    boost::asio::streambuf readData;
 
     Chimera::Serial::Status open();
 
-    void readCallback( bool &data_available,
-                       DeadlineTimer_sPtr &timeout,
-                       const boost::system::error_code &error,
-                       std::size_t bytes_transferred );
+    void callback_readComplete( const boost::system::error_code &error, const size_t bytesTransferred );
+    void callback_timeoutExpired( const boost::system::error_code &error );
 
-    void waitCallback( SerialPort_sPtr &serialPort, const boost::system::error_code &error );
+    Chimera::Serial::Status asyncResult;
+    size_t bytesTransferred;
   };
 }    // namespace HWInterface
-
 
 #endif /* !BUS_PIRATE_CPP_SERIAL_DRIVER_HPP */

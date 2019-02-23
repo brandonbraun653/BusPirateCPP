@@ -13,6 +13,9 @@
 
 /* C++ Includes */
 #include <iostream>
+#include <vector>
+#include <string>
+#include <algorithm>
 
 /* Boost Includes */
 #include <boost/bind.hpp>
@@ -22,26 +25,14 @@ using namespace Chimera::Serial;
 
 namespace HWInterface
 {
-  SerialDriver::SerialDriver( std::string &device )
+  SerialDriver::SerialDriver( std::string &device ) : io(), serialPort( io ), timer( io )
   {
-    timer  = std::make_unique<boost::asio::deadline_timer>( ioService );
-    serial = std::make_unique<boost::asio::serial_port>( ioService );
-
     serialDevice = device;
   }
 
   Chimera::Serial::Status SerialDriver::begin( const Chimera::Serial::Modes txMode, const Chimera::Serial::Modes rxMode )
   {
-    Status error = Status::OK;
-    boost::system::error_code hw_err;
-
-    /*------------------------------------------------
-    Configure to requested parameters. RX and TX mode are ignored as
-    they are handled by the OS.
-    ------------------------------------------------*/
-    error = open();
-
-    return error;
+    return open();
   }
 
   Chimera::Serial::Status SerialDriver::configure(
@@ -51,7 +42,7 @@ namespace HWInterface
 
     Status error = Status::OK;
 
-    if ( !serial )
+    if ( !serialPort.is_open() )
     {
       error = Status::NOT_INITIALIZED;
     }
@@ -60,53 +51,53 @@ namespace HWInterface
       /*------------------------------------------------
       System Baud Rate
       ------------------------------------------------*/
-      boost::asio::serial_port_base::baud_rate BAUD( baud );
-      serial->set_option( BAUD );
+      serial_port_base::baud_rate BAUD( baud );
+      serialPort.set_option( BAUD );
 
       /*------------------------------------------------
       Data Width
       ------------------------------------------------*/
-      boost::asio::serial_port_base::character_size CHAR( static_cast<uint8_t>( width ) );
-      serial->set_option( CHAR );
+      serial_port_base::character_size CHAR( static_cast<uint8_t>( width ) );
+      serialPort.set_option( CHAR );
 
       /*------------------------------------------------
       Parity
       ------------------------------------------------*/
       static_assert( serial_port_base::parity::type::none == static_cast<int>( Parity::PAR_NONE ),
-                     "Parity 'none' type does not match!" );
+                      "Parity 'none' type does not match!" );
       static_assert( serial_port_base::parity::type::odd == static_cast<int>( Parity::PAR_ODD ),
-                     "Parity 'odd' type does not match!" );
+                      "Parity 'odd' type does not match!" );
       static_assert( serial_port_base::parity::type::even == static_cast<int>( Parity::PAR_EVEN ),
-                     "Parity 'even' type does not match!" );
+                      "Parity 'even' type does not match!" );
 
       serial_port_base::parity PARITY( static_cast<serial_port_base::parity::type>( parity ) );
-      serial->set_option( PARITY );
+      serialPort.set_option( PARITY );
 
       /*------------------------------------------------
       Stop Bits
       ------------------------------------------------*/
       static_assert( serial_port_base::stop_bits::type::one == static_cast<int>( StopBits::SBITS_ONE ),
-                     "Stop bits 'one' type does not match!" );
+                      "Stop bits 'one' type does not match!" );
       static_assert( serial_port_base::stop_bits::type::onepointfive == static_cast<int>( StopBits::SBITS_ONE_POINT_FIVE ),
-                     "Stop bits '1.5' type does not match!" );
+                      "Stop bits '1.5' type does not match!" );
       static_assert( serial_port_base::stop_bits::type::two == static_cast<int>( StopBits::SBITS_TWO ),
-                     "Stop bits 'two' type does not match!" );
+                      "Stop bits 'two' type does not match!" );
 
       serial_port_base::stop_bits STOP( static_cast<serial_port_base::stop_bits::type>( stop ) );
-      serial->set_option( STOP );
+      serialPort.set_option( STOP );
 
       /*------------------------------------------------
       Flow Control
       ------------------------------------------------*/
       static_assert( serial_port_base::flow_control::type::none == static_cast<int>( FlowControl::FCTRL_NONE ),
-                     "Flow control 'none' type does not match!" );
+                      "Flow control 'none' type does not match!" );
       static_assert( serial_port_base::flow_control::type::software == static_cast<int>( FlowControl::FCTRL_SW ),
-                     "Flow control 'sw' type does not match!" );
+                      "Flow control 'sw' type does not match!" );
       static_assert( serial_port_base::flow_control::type::hardware == static_cast<int>( FlowControl::FCTRL_HW ),
-                     "Flow control 'hw' type does not match!" );
+                      "Flow control 'hw' type does not match!" );
 
       serial_port_base::flow_control FLOW( static_cast<serial_port_base::flow_control::type>( flow ) );
-      serial->set_option( FLOW );
+      serialPort.set_option( FLOW );
     }
 
     return error;
@@ -116,7 +107,7 @@ namespace HWInterface
   {
     Status error = Status::OK;
 
-    serial->close();
+    serialPort.close();
 
     return error;
   }
@@ -134,76 +125,115 @@ namespace HWInterface
 
   Chimera::Serial::Status SerialDriver::write( const uint8_t *const buffer, const size_t length, const uint32_t timeout_mS )
   {
-    Status error     = Status::OK;
-    auto asio_buffer = boost::asio::buffer( buffer, length );
-
-    /*------------------------------------------------
-    Open the device for reading
-    ------------------------------------------------*/
-    error = open();
-
-    /*------------------------------------------------
-    Execute the read operation
-    ------------------------------------------------*/
-    if ( error == Status::OK )
-    {
-      try
-      {
-        serial->write_some( asio_buffer );
-      }
-      catch ( const boost::system::system_error & )
-      {
-        error = Status::FAILED_WRITE;
-      }
-    }
-
-    return error;
+    boost::asio::write( serialPort, boost::asio::buffer( buffer, length ) );
+    return Status::OK;
   }
 
   Chimera::Serial::Status SerialDriver::read( uint8_t *const buffer, const size_t length, const uint32_t timeout_mS )
   {
-    Status error       = Status::OK;
-    bool dataAvailable = false;
-    auto asio_buffer   = boost::asio::buffer( buffer, length );
-    auto read_callback = boost::bind( &SerialDriver::readCallback,
-                                      this,
-                                      boost::ref( dataAvailable ),
-                                      boost::ref( timer ),
-                                      boost::asio::placeholders::error,
-                                      boost::asio::placeholders::bytes_transferred );
-
-    auto wait_callback =
-        boost::bind( &SerialDriver::waitCallback, this, boost::ref( serial ), boost::asio::placeholders::error );
+    /*------------------------------------------------
+    Start the asynchronous read
+    ------------------------------------------------*/
+    boost::asio::async_read( serialPort,
+                             boost::asio::buffer( buffer, length ),
+                             boost::bind( &SerialDriver::callback_readComplete,
+                                          this,
+                                          boost::asio::placeholders::error,
+                                          boost::asio::placeholders::bytes_transferred ) );
 
     /*------------------------------------------------
-    Open the device for reading
+    Initialize the timeout service
     ------------------------------------------------*/
-    error = open();
+    timer.expires_from_now( boost::posix_time::milliseconds( timeout_mS ) );
+    timer.async_wait( boost::bind( &SerialDriver::callback_timeoutExpired, this, boost::asio::placeholders::error ) );
 
     /*------------------------------------------------
-    Execute the read operation
+    Periodically grab updates from the io_service. Updates
+    are propagated through the class callback_*() functions.
     ------------------------------------------------*/
-    if ( error == Status::OK )
+    asyncResult      = Status::RX_IN_PROGRESS;
+    bytesTransferred = 0;
+
+    while ( asyncResult == Status::RX_IN_PROGRESS )
     {
-      /*------------------------------------------------
-      Set up the asynchronous read parameters
-      ------------------------------------------------*/
-      serial->async_read_some( asio_buffer, read_callback );
-      timer->expires_from_now( boost::posix_time::milliseconds( timeout_mS ) );
-      timer->async_wait( wait_callback );
+      io.run_one();
 
-      /*------------------------------------------------
-      Blocks until all data is read or the timeout expires.
-      ------------------------------------------------*/
-      ioService.run();
-
-      if ( !dataAvailable )
+      switch ( asyncResult )
       {
-        error = Status::FAILED_READ;
+        case Status::RX_COMPLETE:
+          timer.cancel();
+          break;
+
+        case Status::GENERIC_ERROR:
+          timer.cancel();
+          serialPort.cancel();
+          break;
+
+        case Status::TIMEOUT:
+          serialPort.cancel();
+          break;
+
+        case Status::RX_IN_PROGRESS:
+        default:
+          break;
       }
     }
 
-    return error;
+    return asyncResult;
+  }
+
+  Chimera::Serial::Status SerialDriver::readUntil( std::vector<uint8_t> &buffer,
+                                                   const boost::regex &expr,
+                                                   const uint32_t timeout_mS )
+  {
+    /*------------------------------------------------
+    Start the asynchronous read
+    ------------------------------------------------*/
+    boost::asio::async_read_until( serialPort, boost::asio::dynamic_buffer( buffer ), expr,
+                                   boost::bind( &SerialDriver::callback_readComplete,
+                                                this,
+                                                boost::asio::placeholders::error,
+                                                boost::asio::placeholders::bytes_transferred ) );
+
+    /*------------------------------------------------
+    Initialize the timeout service
+    ------------------------------------------------*/
+    timer.expires_from_now( boost::posix_time::milliseconds( timeout_mS ) );
+    timer.async_wait( boost::bind( &SerialDriver::callback_timeoutExpired, this, boost::asio::placeholders::error ) );
+
+    /*------------------------------------------------
+    Periodically grab updates from the io_service. Updates
+    are propagated through the class callback_*() functions.
+    ------------------------------------------------*/
+    asyncResult      = Status::RX_IN_PROGRESS;
+    bytesTransferred = 0;
+
+    while ( asyncResult == Status::RX_IN_PROGRESS )
+    {
+      io.run_one();
+
+      switch ( asyncResult )
+      {
+        case Status::RX_COMPLETE:
+          timer.cancel();
+          break;
+
+        case Status::GENERIC_ERROR:
+          timer.cancel();
+          serialPort.cancel();
+          break;
+
+        case Status::TIMEOUT:
+          serialPort.cancel();
+          break;
+
+        case Status::RX_IN_PROGRESS:
+        default:
+          break;
+      }
+    }
+
+    return asyncResult;
   }
 
   Chimera::Serial::Status SerialDriver::open()
@@ -212,9 +242,9 @@ namespace HWInterface
 
     try
     {
-      if ( !serial->is_open() )
+      if ( !serialPort.is_open() )
       {
-        serial->open( serialDevice );
+        serialPort.open( serialDevice );
       }
     }
     catch ( const boost::system::system_error & )
@@ -225,35 +255,24 @@ namespace HWInterface
     return error;
   }
 
-
-  void SerialDriver::readCallback( bool &data_available,
-                                   DeadlineTimer_sPtr &timeout,
-                                   const boost::system::error_code &error,
-                                   std::size_t bytes_transferred )
+  void SerialDriver::callback_readComplete( const boost::system::error_code &error, const size_t bytesTransferred )
   {
-    if ( error || !bytes_transferred )
+    asyncResult = Status::GENERIC_ERROR;
+
+    if ( !error )
     {
-      std::cout << "Serial read canceled" << std::endl;
-      data_available = false;
+      asyncResult            = Status::RX_COMPLETE;
+      this->bytesTransferred = bytesTransferred;
       return;
     }
-
-    std::cout << "Data read successfully, canceling timeout" << std::endl;
-    timeout->cancel();    // will cause wait_callback to fire with an error
-    data_available = true;
   }
 
-  void SerialDriver::waitCallback( SerialPort_sPtr &serialPort, const boost::system::error_code &error )
+  void SerialDriver::callback_timeoutExpired( const boost::system::error_code &error )
   {
-    if ( error )
+    if ( !error && asyncResult == Status::RX_IN_PROGRESS )
     {
-      // Data was read and this timeout was canceled
-      std::cout << "Timeout canceled" << std::endl;
-      return;
+      asyncResult = Status::TIMEOUT;
     }
-
-    std::cout << "No data read, closing the serial port." << std::endl;
-    serialPort->cancel();    // will cause read_callback to fire with an error
   }
 
 }    // namespace HWInterface
