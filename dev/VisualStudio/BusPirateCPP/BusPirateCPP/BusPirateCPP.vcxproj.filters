@@ -87,11 +87,11 @@
     <ClInclude Include="..\..\..\..\lib\Chimera\Chimera\watchdog.hpp">
       <Filter>Chimera</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\..\..\src\bus_pirate.hpp">
+      <Filter>src</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="pch.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="BusPirateCPP.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -99,6 +99,9 @@
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\..\src\serial_driver.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\src\bus_pirate.cpp">
       <Filter>src</Filter>
     </ClCompile>
   </ItemGroup>

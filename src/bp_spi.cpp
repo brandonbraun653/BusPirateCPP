@@ -10,7 +10,7 @@
 
 #include "bp_spi.hpp"
 
-namespace BusPirate
+namespace HWInterface
 {
   Chimera::SPI::Status BPSpi::init( const Chimera::SPI::Setup &setupStruct )
   {

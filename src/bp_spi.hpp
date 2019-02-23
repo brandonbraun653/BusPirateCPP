@@ -15,7 +15,7 @@
 
 #include <Chimera/interface.hpp>
 
-namespace BusPirate
+namespace HWInterface
 {
   class BPSpi : public Chimera::SPI::Interface
   {
