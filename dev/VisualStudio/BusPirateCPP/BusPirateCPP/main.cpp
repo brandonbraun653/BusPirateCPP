@@ -12,7 +12,7 @@ using namespace std;
 
 int main()
 {
-  std::string device = "COM7";
+  std::string device = "COM6";
   HWInterface::BusPirate::Device bp( device );
   bp.open();
 

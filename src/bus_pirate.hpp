@@ -37,7 +37,7 @@ namespace HWInterface
     class Commands
     {
     public:
-      static constexpr auto info = "i\n";
+      static constexpr auto info = "i";
     };
 
     class Device
@@ -91,7 +91,7 @@ namespace HWInterface
       /**
        *	Sends a command to the device and returns the response
        *
-       *	@param[in]	cmd     Command to be sent
+       *	@param[in]	cmd     Command to be sent. Should NOT end with CR or LF.
        *	@return std::string
        */
       std::string sendCommand( std::string &cmd );
