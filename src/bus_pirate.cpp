@@ -41,12 +41,23 @@ namespace HWInterface
     static std::vector<std::string> knownFirmwareVer   = { "v5.10" };
     static std::vector<std::string> knownBootloaderVer = { "v4.4" };
 
+    /*------------------------------------------------
+    Version limits for various feature support
+    ------------------------------------------------*/
     static constexpr uint32_t minResetFirmwareMajorVer = 2; /**< Minimum firmware version needed to support reset '#' command */
 
+    /*------------------------------------------------
+    The current supported Bus Pirate operational modes
+    ------------------------------------------------*/
+    //std::array<ModeTypeBase, 2> supportedModes = { HiZMode(), SPIMode() };
+    //{ "HiZ", "1-WIRE", "UART", "I2C", "SPI", "JTAG", "RAW2WIRE", "RAW3WIRE", "PC KEYBOARD", "LCD" };
 
     Device::Device( std::string &devicePort )
     {
       serial = std::make_shared<SerialDriver>( devicePort );
+
+      supportedModes.push_back( std::make_unique<HiZMode>() );
+      supportedModes.push_back( std::make_unique<SPIMode>() );
     }
 
     bool Device::open()
@@ -66,7 +77,7 @@ namespace HWInterface
         hasn't been cleared out yet. Boost does not provide a way to flush this, so the simple fix is just to try and read
         things out again.
         ------------------------------------------------*/
-        if ( error == Status::OK )
+        if ( error == Status::OK && reset() )
         {
           for ( auto x = 0; x < MAX_CONNECT_ATTEMPTS; x++ )
           {
@@ -94,25 +105,25 @@ namespace HWInterface
 
     bool Device::reset()
     {
-      bool result = false;
+      bool result     = false;
+      std::string cmd = MenuCommands::reset;
+      std::string out = sendResponsiveCommand( cmd );
 
-      if ( deviceInfo.isValid && ( deviceInfo.firmwareVerNumMajor > minResetFirmwareMajorVer ) )
+      /*------------------------------------------------
+      According to the docs, RESET should be printed if the
+      command was received/executed successfully.
+      ------------------------------------------------*/
+      if ( out.find( "RESET" ) != std::string::npos )
       {
-        std::string cmd = MenuCommands::reset;
-        std::string out = sendCommand(cmd);
-
-        /*------------------------------------------------
-        According to the docs, RESET should be printed if the
-        command was received/executed successfully.
-        ------------------------------------------------*/
-        if ( out.find( "RESET" ) != std::string::npos )
-        {
-          result = true;
-        }
-
-        std::cout << out << std::endl;
+        result = true;
       }
+
       return result;
+    }
+
+    bool Device::isConnected()
+    {
+      return deviceInfo.isValid;
     }
 
     Device::Info Device::getInfo()
@@ -121,7 +132,7 @@ namespace HWInterface
 
       std::regex numberOnlyRegex = std::regex( R"([\D])" );
       std::string cmd            = MenuCommands::info;
-      std::string rawOutput      = sendCommand( cmd );
+      std::string rawOutput      = sendResponsiveCommand( cmd );
       auto split_opt             = strtk::split_options::compress_delimiters;
 
       /*------------------------------------------------
@@ -241,14 +252,68 @@ namespace HWInterface
       return info;
     }
 
-    std::string Device::sendCommand( std::string &cmd )
+    ModeBase_sPtr Device::getMode()
+    {
+      ModeBase_sPtr resultMode;
+
+      if ( isConnected() )
+      {
+        /*------------------------------------------------
+        Ping the device a few times so the returned string contains the
+        current mode the device is in.
+        ------------------------------------------------*/
+        std::string reportedMode;
+        std::string cmd = MenuCommands::ping;
+
+        for ( auto x = 0; x < 3; x++ )
+        {
+          reportedMode.clear();
+          reportedMode = sendResponsiveCommand( cmd );
+        }
+
+        /*------------------------------------------------
+        Parse the mode
+        ------------------------------------------------*/
+        for ( ModeBase_sPtr &x : supportedModes )
+        {
+          if (reportedMode.find(x->modeString()) != std::string::npos)
+          {
+            resultMode = x;
+          }
+        }
+      }
+      return resultMode;
+    }
+
+    void Device::sendCommand( std::string &cmd ) noexcept
+    {
+      cmd += '\n';
+      serial->write( reinterpret_cast<const uint8_t *>( cmd.c_str() ), cmd.length() );
+
+      /*------------------------------------------------
+      Even though we don't return the output, it still needs to be read out
+      or else it will show up the next time someone actually wants output.
+      ------------------------------------------------*/
+      std::vector<uint8_t> readBuffer;
+      serial->readUntil( readBuffer, boost_modeRegex );
+    }
+
+    std::string Device::sendResponsiveCommand( std::string &cmd, const boost::regex &delimiter ) noexcept
     {
       std::vector<uint8_t> readBuffer;
       size_t original_cmd_len = cmd.length();
 
       cmd += '\n';
       serial->write( reinterpret_cast<const uint8_t *>( cmd.c_str() ), cmd.length() );
-      serial->readUntil( readBuffer, delimiter_regex );
+
+      if ( delimiter.empty() )
+      {
+        serial->readUntil( readBuffer, boost_modeRegex );
+      }
+      else
+      {
+        serial->readUntil( readBuffer, delimiter );
+      }
 
       /*------------------------------------------------
       BusPirate emulates a terminal, which means our command is printed
@@ -266,10 +331,53 @@ namespace HWInterface
       readBuffer.erase( readBuffer.begin(), readBuffer.begin() + original_cmd_len + newline_char_len );
 
       /* Remove the delimiter from the back */
-      readBuffer.erase( readBuffer.end() - delimiter.size(), readBuffer.end() );
+      // TODO: Implementing this implies knowledge of the current mode
+      // readBuffer.erase( readBuffer.end() - delimiter.size(), readBuffer.end() );
 
       return std::string( readBuffer.begin(), readBuffer.end() );
     }
+
+
+    std::string HiZMode::modeString() noexcept
+    {
+      return std::string( "HiZ" );
+    }
+
+    std::string HiZMode::delimiter() noexcept
+    {
+      return std::string( "\r\nHiZ>" );
+    }
+
+    std::regex HiZMode::regex() noexcept
+    {
+      return std::regex( "(HiZ>)" );
+    }
+
+    HWInterface::BusPirate::OperationalModes HiZMode::modeType() noexcept
+    {
+      return OperationalModes::BP_MODE_HiZ;
+    }
+
+    std::string SPIMode::modeString() noexcept
+    {
+      return std::string( "SPI" );
+    }
+
+    std::string SPIMode::delimiter() noexcept
+    {
+      return std::string( "\r\nSPI>" );
+    }
+
+    std::regex SPIMode::regex() noexcept
+    {
+      return std::regex( "(SPI>)" );
+    }
+
+    HWInterface::BusPirate::OperationalModes SPIMode::modeType() noexcept
+    {
+      return OperationalModes::BP_MODE_SPI;
+    }
+
   }  // namespace BusPirate
 
 }  // namespace HWInterface
