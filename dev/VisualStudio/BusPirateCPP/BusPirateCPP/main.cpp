@@ -12,11 +12,13 @@ using namespace std;
 
 int main()
 {
-  std::string device = "COM6";
+  std::string device = "COM7";
   HWInterface::BusPirate::Device bp( device );
   bp.open();
 
   auto info = bp.getInfo();
+
+  bp.reset();
 
   bp.close();
 

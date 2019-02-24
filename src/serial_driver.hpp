@@ -35,39 +35,37 @@ namespace HWInterface
     SerialDriver( std::string &device );
     ~SerialDriver() = default;
 
-    Chimera::Serial::Status begin( const Chimera::Serial::Modes txMode = Chimera::Serial::Modes::BLOCKING,
-                                   const Chimera::Serial::Modes rxMode = Chimera::Serial::Modes::BLOCKING ) override;
+    Chimera::Status_t begin( const Chimera::Serial::Modes txMode = Chimera::Serial::Modes::BLOCKING,
+                             const Chimera::Serial::Modes rxMode = Chimera::Serial::Modes::BLOCKING ) noexcept override;
 
-    Chimera::Serial::Status
-        configure( const uint32_t baud                     = 115200,
-                   const Chimera::Serial::CharWid width    = Chimera::Serial::CharWid::CW_8BIT,
-                   const Chimera::Serial::Parity parity    = Chimera::Serial::Parity::PAR_NONE,
-                   const Chimera::Serial::StopBits stop    = Chimera::Serial::StopBits::SBITS_ONE,
-                   const Chimera::Serial::FlowControl flow = Chimera::Serial::FlowControl::FCTRL_NONE ) override;
+    Chimera::Status_t configure(
+        const uint32_t baud = 115200, const Chimera::Serial::CharWid width = Chimera::Serial::CharWid::CW_8BIT,
+        const Chimera::Serial::Parity parity    = Chimera::Serial::Parity::PAR_NONE,
+        const Chimera::Serial::StopBits stop    = Chimera::Serial::StopBits::SBITS_ONE,
+        const Chimera::Serial::FlowControl flow = Chimera::Serial::FlowControl::FCTRL_NONE ) noexcept override;
 
-    Chimera::Serial::Status end() override;
+    Chimera::Status_t end() noexcept override;
 
-    Chimera::Serial::Status setBaud( const uint32_t buad ) override;
+    Chimera::Status_t setBaud( const uint32_t buad ) noexcept override;
 
-    Chimera::Serial::Status setMode( const Chimera::Serial::SubPeripheral periph, const Chimera::Serial::Modes mode ) override;
+    Chimera::Status_t setMode( const Chimera::Serial::SubPeripheral periph,
+                               const Chimera::Serial::Modes mode ) noexcept override;
 
-    Chimera::Serial::Status write( const uint8_t *const buffer, const size_t length, const uint32_t timeout_mS = 500 ) override;
+    Chimera::Status_t write( const uint8_t *const buffer, const size_t length,
+                             const uint32_t timeout_mS = 500 ) noexcept override;
 
-    Chimera::Serial::Status read( uint8_t *const buffer, const size_t length, const uint32_t timeout_mS = 500 ) override;
+    Chimera::Status_t read( uint8_t *const buffer, const size_t length, const uint32_t timeout_mS = 500 ) noexcept override;
+
+
+    Chimera::Status_t readUntil( std::vector<uint8_t> &buffer, const boost::regex &expr,
+                                 const uint32_t timeout_mS = 500 ) noexcept;
 
     /**
+     *	Checks if the serial port is open or not
      *
-     *
-     *	@param[in]	buffer
-     *	@param[in]	length
-     *	@param[in]	expr
-     *	@param[in]	bytesTransferred
-     *	@param[in]	timeout_mS
-     *	@return Chimera::Serial::Status
+     *	@return True if open, false if not
      */
-    Chimera::Serial::Status readUntil( std::vector<uint8_t> &buffer,
-                                       const boost::regex &expr,
-                                       const uint32_t timeout_mS = 500 );
+    bool isOpen() noexcept;
 
   private:
     std::string serialDevice;
@@ -78,12 +76,12 @@ namespace HWInterface
     boost::asio::deadline_timer timer;
     boost::asio::streambuf readData;
 
-    Chimera::Serial::Status open();
+    Chimera::Status_t open() noexcept;
 
-    void callback_readComplete( const boost::system::error_code &error, const size_t bytesTransferred );
-    void callback_timeoutExpired( const boost::system::error_code &error );
+    void callback_readComplete( const boost::system::error_code &error, const size_t bytesTransferred ) noexcept;
+    void callback_timeoutExpired( const boost::system::error_code &error ) noexcept;
 
-    Chimera::Serial::Status asyncResult;
+    Chimera::Status_t asyncResult;
     size_t bytesTransferred;
   };
 }    // namespace HWInterface

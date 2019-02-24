@@ -34,10 +34,11 @@ namespace HWInterface
     using Device_uPtr = std::unique_ptr<Device>;
 
 
-    class Commands
+    class MenuCommands
     {
     public:
       static constexpr auto info = "i";
+      static constexpr auto reset = "#";
     };
 
     class Device
@@ -45,21 +46,47 @@ namespace HWInterface
     public:
       struct Info
       {
-        std::string boardVer;
+        bool isValid;
+
+        std::string hwVer;
         std::string firmwareVer;
         std::string bootLoaderVer;
         std::string deviceID;
         std::string revID;
         std::string mcuVer;
 
+        uint32_t hwVerNum;
+        uint32_t hwVerNumMajor;
+
+        uint32_t firmwareVerNum;
+        uint32_t firmwareVerNumMajor;
+        uint32_t firmwareVerNumMinor;
+
+        uint32_t bootloaderVerNum;
+        uint32_t bootloaderVerNumMajor;
+        uint32_t bootloaderVerNumMinor;
+
         Info()
         {
-          boardVer      = "N/A";
+          isValid = false;
+
+          hwVer         = "N/A";
           bootLoaderVer = "N/A";
           deviceID      = "N/A";
           firmwareVer   = "N/A";
           mcuVer        = "N/A";
           revID         = "N/A";
+
+          hwVerNum      = 0;
+          hwVerNumMajor = 0;
+
+          firmwareVerNum      = 0;
+          firmwareVerNumMajor = 0;
+          firmwareVerNumMinor = 0;
+
+          bootloaderVerNum      = 0;
+          bootloaderVerNumMajor = 0;
+          bootloaderVerNumMinor = 0;
         }
       };
 
@@ -81,12 +108,19 @@ namespace HWInterface
       void close();
 
       /**
-       *  Gets the device information
+       *	Resets the Bus Pirate according to command '#'
+       *	Only firmware versions v2.0+ can do this.
+       *
+       *	@return True if success, false if not
+       */
+      bool reset();
+
+      /**
+       *  Gets the device information by sending the 'i' command
        *
        *  @return Struct containing the device info
        */
       Info getInfo();
-
 
       /**
        *	Sends a command to the device and returns the response
@@ -100,14 +134,18 @@ namespace HWInterface
     protected:
       SerialDriver_sPtr serial;
 
-      boost::regex delimiter_regex{ "(HiZ>)" };   /**< Matches the BusPirate terminal "end" character sequence */
+      std::string delimiter = "\r\nHiZ>";       /**< Full terminal end of command character sequence */
+      boost::regex delimiter_regex{ "(HiZ>)" }; /**< Matches the BusPirate terminal "end" character sequence */
+
+      static constexpr uint8_t MAX_CONNECT_ATTEMPTS = 3;
+
+      Info deviceInfo;
 
     private:
-      bool is_open;
     };
-  }    // namespace BusPirate
+  }  // namespace BusPirate
 
-}    // namespace HWInterface
+}  // namespace HWInterface
 
 
 #endif /* !BUS_PIRATE_HPP */

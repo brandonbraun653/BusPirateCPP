@@ -21,6 +21,7 @@
 #include <boost/bind.hpp>
 #include <boost/asio/serial_port_base.hpp>
 
+using namespace Chimera;
 using namespace Chimera::Serial;
 
 namespace HWInterface
@@ -30,17 +31,17 @@ namespace HWInterface
     serialDevice = device;
   }
 
-  Chimera::Serial::Status SerialDriver::begin( const Chimera::Serial::Modes txMode, const Chimera::Serial::Modes rxMode )
+  Chimera::Status_t SerialDriver::begin( const Chimera::Serial::Modes txMode, const Chimera::Serial::Modes rxMode ) noexcept
   {
     return open();
   }
 
-  Chimera::Serial::Status SerialDriver::configure(
-      const uint32_t baud, const CharWid width, const Parity parity, const StopBits stop, const FlowControl flow )
+  Chimera::Status_t SerialDriver::configure( const uint32_t baud, const CharWid width, const Parity parity, const StopBits stop,
+                                             const FlowControl flow ) noexcept
   {
     using namespace boost::asio;
 
-    Status error = Status::OK;
+    Status_t error = Status::OK;
 
     if ( !serialPort.is_open() )
     {
@@ -48,97 +49,101 @@ namespace HWInterface
     }
     else
     {
-      /*------------------------------------------------
-      System Baud Rate
-      ------------------------------------------------*/
-      serial_port_base::baud_rate BAUD( baud );
-      serialPort.set_option( BAUD );
+      try
+      {
+        /*------------------------------------------------
+        System Baud Rate
+        ------------------------------------------------*/
+        serial_port_base::baud_rate BAUD( baud );
+        serialPort.set_option( BAUD );
 
-      /*------------------------------------------------
-      Data Width
-      ------------------------------------------------*/
-      serial_port_base::character_size CHAR( static_cast<uint8_t>( width ) );
-      serialPort.set_option( CHAR );
+        /*------------------------------------------------
+        Data Width
+        ------------------------------------------------*/
+        serial_port_base::character_size CHAR( static_cast<uint8_t>( width ) );
+        serialPort.set_option( CHAR );
 
-      /*------------------------------------------------
-      Parity
-      ------------------------------------------------*/
-      static_assert( serial_port_base::parity::type::none == static_cast<int>( Parity::PAR_NONE ),
-                      "Parity 'none' type does not match!" );
-      static_assert( serial_port_base::parity::type::odd == static_cast<int>( Parity::PAR_ODD ),
-                      "Parity 'odd' type does not match!" );
-      static_assert( serial_port_base::parity::type::even == static_cast<int>( Parity::PAR_EVEN ),
-                      "Parity 'even' type does not match!" );
+        /*------------------------------------------------
+        Parity
+        ------------------------------------------------*/
+        static_assert( serial_port_base::parity::type::none == static_cast<int>( Parity::PAR_NONE ),
+                       "Parity 'none' type does not match!" );
+        static_assert( serial_port_base::parity::type::odd == static_cast<int>( Parity::PAR_ODD ),
+                       "Parity 'odd' type does not match!" );
+        static_assert( serial_port_base::parity::type::even == static_cast<int>( Parity::PAR_EVEN ),
+                       "Parity 'even' type does not match!" );
 
-      serial_port_base::parity PARITY( static_cast<serial_port_base::parity::type>( parity ) );
-      serialPort.set_option( PARITY );
+        serial_port_base::parity PARITY( static_cast<serial_port_base::parity::type>( parity ) );
+        serialPort.set_option( PARITY );
 
-      /*------------------------------------------------
-      Stop Bits
-      ------------------------------------------------*/
-      static_assert( serial_port_base::stop_bits::type::one == static_cast<int>( StopBits::SBITS_ONE ),
-                      "Stop bits 'one' type does not match!" );
-      static_assert( serial_port_base::stop_bits::type::onepointfive == static_cast<int>( StopBits::SBITS_ONE_POINT_FIVE ),
-                      "Stop bits '1.5' type does not match!" );
-      static_assert( serial_port_base::stop_bits::type::two == static_cast<int>( StopBits::SBITS_TWO ),
-                      "Stop bits 'two' type does not match!" );
+        /*------------------------------------------------
+        Stop Bits
+        ------------------------------------------------*/
+        static_assert( serial_port_base::stop_bits::type::one == static_cast<int>( StopBits::SBITS_ONE ),
+                       "Stop bits 'one' type does not match!" );
+        static_assert( serial_port_base::stop_bits::type::onepointfive == static_cast<int>( StopBits::SBITS_ONE_POINT_FIVE ),
+                       "Stop bits '1.5' type does not match!" );
+        static_assert( serial_port_base::stop_bits::type::two == static_cast<int>( StopBits::SBITS_TWO ),
+                       "Stop bits 'two' type does not match!" );
 
-      serial_port_base::stop_bits STOP( static_cast<serial_port_base::stop_bits::type>( stop ) );
-      serialPort.set_option( STOP );
+        serial_port_base::stop_bits STOP( static_cast<serial_port_base::stop_bits::type>( stop ) );
+        serialPort.set_option( STOP );
 
-      /*------------------------------------------------
-      Flow Control
-      ------------------------------------------------*/
-      static_assert( serial_port_base::flow_control::type::none == static_cast<int>( FlowControl::FCTRL_NONE ),
-                      "Flow control 'none' type does not match!" );
-      static_assert( serial_port_base::flow_control::type::software == static_cast<int>( FlowControl::FCTRL_SW ),
-                      "Flow control 'sw' type does not match!" );
-      static_assert( serial_port_base::flow_control::type::hardware == static_cast<int>( FlowControl::FCTRL_HW ),
-                      "Flow control 'hw' type does not match!" );
+        /*------------------------------------------------
+        Flow Control
+        ------------------------------------------------*/
+        static_assert( serial_port_base::flow_control::type::none == static_cast<int>( FlowControl::FCTRL_NONE ),
+                       "Flow control 'none' type does not match!" );
+        static_assert( serial_port_base::flow_control::type::software == static_cast<int>( FlowControl::FCTRL_SW ),
+                       "Flow control 'sw' type does not match!" );
+        static_assert( serial_port_base::flow_control::type::hardware == static_cast<int>( FlowControl::FCTRL_HW ),
+                       "Flow control 'hw' type does not match!" );
 
-      serial_port_base::flow_control FLOW( static_cast<serial_port_base::flow_control::type>( flow ) );
-      serialPort.set_option( FLOW );
+        serial_port_base::flow_control FLOW( static_cast<serial_port_base::flow_control::type>( flow ) );
+        serialPort.set_option( FLOW );
+      }
+      catch ( const boost::system::system_error & )
+      {
+        error = Status::FAILED_CONFIGURE;
+      }
     }
 
     return error;
   }
 
-  Chimera::Serial::Status SerialDriver::end()
+  Chimera::Status_t SerialDriver::end() noexcept
   {
-    Status error = Status::OK;
+    Status_t error = Status::OK;
 
     serialPort.close();
 
     return error;
   }
 
-  Chimera::Serial::Status SerialDriver::setBaud( const uint32_t buad )
+  Chimera::Status_t SerialDriver::setBaud( const uint32_t buad ) noexcept
   {
-    throw std::logic_error( "The method or operation is not implemented." );
+    return Status::NOT_SUPPORTED;
   }
 
-  Chimera::Serial::Status SerialDriver::setMode( const Chimera::Serial::SubPeripheral periph,
-                                                 const Chimera::Serial::Modes mode )
+  Chimera::Status_t SerialDriver::setMode( const Chimera::Serial::SubPeripheral periph,
+                                           const Chimera::Serial::Modes mode ) noexcept
   {
-    throw std::logic_error( "The method or operation is not implemented." );
+    return Status::NOT_SUPPORTED;
   }
 
-  Chimera::Serial::Status SerialDriver::write( const uint8_t *const buffer, const size_t length, const uint32_t timeout_mS )
+  Chimera::Status_t SerialDriver::write( const uint8_t *const buffer, const size_t length, const uint32_t timeout_mS ) noexcept
   {
     boost::asio::write( serialPort, boost::asio::buffer( buffer, length ) );
     return Status::OK;
   }
 
-  Chimera::Serial::Status SerialDriver::read( uint8_t *const buffer, const size_t length, const uint32_t timeout_mS )
+  Chimera::Status_t SerialDriver::read( uint8_t *const buffer, const size_t length, const uint32_t timeout_mS ) noexcept
   {
     /*------------------------------------------------
     Start the asynchronous read
     ------------------------------------------------*/
-    boost::asio::async_read( serialPort,
-                             boost::asio::buffer( buffer, length ),
-                             boost::bind( &SerialDriver::callback_readComplete,
-                                          this,
-                                          boost::asio::placeholders::error,
+    boost::asio::async_read( serialPort, boost::asio::buffer( buffer, length ),
+                             boost::bind( &SerialDriver::callback_readComplete, this, boost::asio::placeholders::error,
                                           boost::asio::placeholders::bytes_transferred ) );
 
     /*------------------------------------------------
@@ -164,7 +169,7 @@ namespace HWInterface
           timer.cancel();
           break;
 
-        case Status::GENERIC_ERROR:
+        case Status::UNKNOWN_ERROR:
           timer.cancel();
           serialPort.cancel();
           break;
@@ -182,17 +187,14 @@ namespace HWInterface
     return asyncResult;
   }
 
-  Chimera::Serial::Status SerialDriver::readUntil( std::vector<uint8_t> &buffer,
-                                                   const boost::regex &expr,
-                                                   const uint32_t timeout_mS )
+  Chimera::Status_t SerialDriver::readUntil( std::vector<uint8_t> &buffer, const boost::regex &expr,
+                                             const uint32_t timeout_mS ) noexcept
   {
     /*------------------------------------------------
     Start the asynchronous read
     ------------------------------------------------*/
     boost::asio::async_read_until( serialPort, boost::asio::dynamic_buffer( buffer ), expr,
-                                   boost::bind( &SerialDriver::callback_readComplete,
-                                                this,
-                                                boost::asio::placeholders::error,
+                                   boost::bind( &SerialDriver::callback_readComplete, this, boost::asio::placeholders::error,
                                                 boost::asio::placeholders::bytes_transferred ) );
 
     /*------------------------------------------------
@@ -218,7 +220,7 @@ namespace HWInterface
           timer.cancel();
           break;
 
-        case Status::GENERIC_ERROR:
+        case Status::UNKNOWN_ERROR:
           timer.cancel();
           serialPort.cancel();
           break;
@@ -236,9 +238,14 @@ namespace HWInterface
     return asyncResult;
   }
 
-  Chimera::Serial::Status SerialDriver::open()
+  bool SerialDriver::isOpen() noexcept
   {
-    Status error = Status::OK;
+    return serialPort.is_open();
+  }
+
+  Chimera::Status_t SerialDriver::open() noexcept
+  {
+    Status_t error = Status::OK;
 
     try
     {
@@ -255,9 +262,9 @@ namespace HWInterface
     return error;
   }
 
-  void SerialDriver::callback_readComplete( const boost::system::error_code &error, const size_t bytesTransferred )
+  void SerialDriver::callback_readComplete( const boost::system::error_code &error, const size_t bytesTransferred ) noexcept
   {
-    asyncResult = Status::GENERIC_ERROR;
+    asyncResult = Status::UNKNOWN_ERROR;
 
     if ( !error )
     {
@@ -267,7 +274,7 @@ namespace HWInterface
     }
   }
 
-  void SerialDriver::callback_timeoutExpired( const boost::system::error_code &error )
+  void SerialDriver::callback_timeoutExpired( const boost::system::error_code &error ) noexcept
   {
     if ( !error && asyncResult == Status::RX_IN_PROGRESS )
     {

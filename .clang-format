@@ -6,7 +6,8 @@ AlignConsecutiveDeclarations: 'false'
 AlignEscapedNewlines: Left
 AlignOperands: 'true'
 AlignTrailingComments: 'true'
-AllowShortBlocksOnASingleLine: 'true'
+AllowAllParametersOfDeclarationOnNextLine: 'false'
+AllowShortBlocksOnASingleLine: 'false'
 AllowShortCaseLabelsOnASingleLine: 'false'
 AllowShortFunctionsOnASingleLine: None
 AllowShortIfStatementsOnASingleLine: 'false'
@@ -14,8 +15,8 @@ AllowShortLoopsOnASingleLine: 'false'
 AlwaysBreakAfterReturnType: None
 AlwaysBreakBeforeMultilineStrings: 'false'
 AlwaysBreakTemplateDeclarations: 'true'
-BinPackArguments: 'false'
-BinPackParameters: 'false'
+BinPackArguments: 'true'
+BinPackParameters: 'true'
 BreakBeforeBraces: Custom
 BraceWrapping:
   AfterClass: true 
@@ -32,6 +33,7 @@ BraceWrapping:
   SplitEmptyRecord: true
   SplitEmptyNamespace: true
 BreakBeforeInheritanceComma: 'false'
+BreakBeforeBinaryOperators: 'NonAssignment'
 BreakConstructorInitializers: AfterColon
 BreakStringLiterals: 'true'
 ColumnLimit: '128'
@@ -52,6 +54,8 @@ KeepEmptyLinesAtTheStartOfBlocks: 'false'
 Language: Cpp
 MaxEmptyLinesToKeep: '2'
 NamespaceIndentation: All
+PenaltyBreakAssignment: '50'
+PenaltyReturnTypeOnItsOwnLine: '500'
 PointerAlignment: Right
 ReflowComments: 'true'
 SortIncludes: 'false'
@@ -61,7 +65,7 @@ SpaceAfterTemplateKeyword: 'false'
 SpaceBeforeAssignmentOperators: 'true'
 SpaceBeforeParens: ControlStatements
 SpaceInEmptyParentheses: 'false'
-SpacesBeforeTrailingComments: '4'
+SpacesBeforeTrailingComments: '2'
 SpacesInAngles: 'false'
 SpacesInCStyleCastParentheses: 'true'
 SpacesInContainerLiterals: 'true'
