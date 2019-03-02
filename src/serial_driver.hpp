@@ -32,6 +32,7 @@ namespace HWInterface
   class SerialDriver : public Chimera::Serial::Interface
   {
   public:
+
     SerialDriver( std::string &device );
     ~SerialDriver() = default;
 
@@ -66,6 +67,13 @@ namespace HWInterface
      *	@return True if open, false if not
      */
     bool isOpen() noexcept;
+
+    /**
+     *	Flushes the system TX and RX serial port buffers
+     *	
+     *	@return bool: True if success, false if not
+     */
+     bool flush() noexcept;
 
   private:
     std::string serialDevice;

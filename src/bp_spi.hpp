@@ -59,6 +59,9 @@ namespace HWInterface
 
       Chimera::Status_t getClockFrequency( uint32_t *const freq ) noexcept override;
 
+    protected:
+      bool enterBinaryMode();
+
     private:
       Device &busPirate;
     };

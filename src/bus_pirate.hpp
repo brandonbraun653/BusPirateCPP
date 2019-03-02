@@ -30,6 +30,9 @@ namespace HWInterface
 {
   namespace BusPirate
   {
+    static constexpr uint8_t CMD_ENTER_RAW_BIT_BANG = 0x00;
+    static constexpr uint8_t CMD_EXIT_RAW_BIT_BANG  = 0x0F;
+
     class Device;
     using Device_sPtr = std::shared_ptr<Device>;
     using Device_uPtr = std::unique_ptr<Device>;
@@ -44,10 +47,16 @@ namespace HWInterface
     class MenuCommands
     {
     public:
-      static constexpr auto info    = "i";
-      static constexpr auto reset   = "#";
-      static constexpr auto busMode = "m";
+      static constexpr auto info    = "i\n";
+      static constexpr auto reset   = "#\n";
+      static constexpr auto busMode = "m\n";
       static constexpr auto ping    = "\n";
+    };
+
+    class BitBangCommands
+    {
+    public:
+      static constexpr uint8_t init = 0x00;
     };
 
     enum class OperationalModes : uint8_t
@@ -239,21 +248,112 @@ namespace HWInterface
       /**
        *	Sends a command to the device
        *
-       *	@param[in]	cmd       Command to be sent. Should NOT end with CR or LF.
+       *	@param[in]	cmd         Command to be sent that ends with '\n'.
        *	@return void
        */
-      void sendCommand( std::string &cmd ) noexcept;
+      void sendCommand( const std::string &cmd ) noexcept;
+
+      /**
+       *	Send a series of bytes to the Bus Pirate
+       *
+       *	@param[in]	cmd         Command to be sent that ends with '\n'.
+       *	@return void
+       */
+      void sendCommand( const std::vector<uint8_t> &cmd ) noexcept;
 
       /**
        *	Sends a command to the device and returns the response. If a delimiter
        *  is not specified, it internally uses a regex that matches the end sequence
        *  of all modes currently supported.
        *
-       *	@param[in]	cmd         Command to be sent. Should NOT end with CR or LF.
+       *	@param[in]	cmd         Command to be sent that ends with '\n'.
        *  @param[in]  delimiter   Expected sequence that signals the end of the response.
        *	@return std::string
        */
-      std::string sendResponsiveCommand( std::string &cmd, const boost::regex &delimiter = boost::regex{} ) noexcept;
+      std::string sendResponsiveCommand( const std::string &cmd, const boost::regex &delimiter = boost::regex{} ) noexcept;
+
+      /**
+       *	Send a series of bytes to the Bus Pirate, returning the response to the user.
+       *  Most typically this is used for bit-bang or a raw interface mode
+       *
+       *	@param[in]	cmd         Command to be sent that ends with '\n'.
+       *	@return std::vector<uint8_t>
+       */
+      std::vector<uint8_t> sendResponsiveCommand( const std::vector<uint8_t> &cmd ) noexcept;
+
+      /**
+       *	Enters bit bang mode
+       *
+       *	@return bool: true if success, false if not
+       */
+      bool bbInit();
+
+      /**
+       *  Enters raw SPI mode
+       *
+       *	@return bool: true if success, false if not
+       */
+      bool bbSPI();
+
+      /**
+       *
+       *
+       *	@return bool
+       */
+      bool bbI2C();
+
+      /**
+       *	
+       *	
+       *	@return bool
+       */
+       bool bbUART();
+
+      /**
+       *	
+       *	
+       *	@return bool
+       */
+       bool bb1Wire();
+
+      /**
+       *	
+       *	
+       *	@return bool
+       */
+       bool bbRawWire();
+
+      /**
+       *	
+       *	
+       *	@return bool
+       */
+       bool bbJTAG();
+
+      /**
+       *  Performs a hardware reset of the Bus Pirate and returns to the standard
+       *  input terminal. bbInit() must be called again to re-enter bit bang mode.
+       *	
+       *	@return bool: true if success, false if not
+       */
+       bool bbReset();
+
+      /**
+       *	Manually sets output/input pin configurations.
+       *  Input parameter should set (output) or clear (input) the lower 5 bits in this order:
+       *  AUX|MOSI|CLK|MISO|CS
+       *	
+       *	@param[in]	cfg         The pin configuration option for the Bus Pirate
+       *	@return bool: true if success, false if not 
+       */
+       bool bbCfgPins( const uint8_t &cfg );
+
+      /**
+       *	Exits from whatever raw mode the user was in and goes back to bit bang mode
+       *
+       *	@return bool
+       */
+      bool bbExit();
 
 
     protected:
@@ -263,6 +363,8 @@ namespace HWInterface
       static constexpr uint8_t MAX_CONNECT_ATTEMPTS = 3;
 
       Info deviceInfo;
+
+      bool connectedToSerial; /**< True if the device is connected and configured over serial, false if not */
 
       std::vector<ModeBase_sPtr> supportedModes;
 

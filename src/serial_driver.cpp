@@ -21,6 +21,11 @@
 #include <boost/bind.hpp>
 #include <boost/asio/serial_port_base.hpp>
 
+/* Windows Includes */
+#if defined( _WIN32 ) || defined( _WIN64 )
+#include <Windows.h>
+#endif
+
 using namespace Chimera;
 using namespace Chimera::Serial;
 
@@ -190,10 +195,12 @@ namespace HWInterface
   Chimera::Status_t SerialDriver::readUntil( std::vector<uint8_t> &buffer, const boost::regex &expr,
                                              const uint32_t timeout_mS ) noexcept
   {
+    boost::asio::dynamic_vector_buffer<uint8_t, std::allocator<uint8_t>> testvar = boost::asio::dynamic_buffer( buffer );
+    
     /*------------------------------------------------
     Start the asynchronous read
     ------------------------------------------------*/
-    boost::asio::async_read_until( serialPort, boost::asio::dynamic_buffer( buffer ), expr,
+    boost::asio::async_read_until( serialPort, testvar , expr,
                                    boost::bind( &SerialDriver::callback_readComplete, this, boost::asio::placeholders::error,
                                                 boost::asio::placeholders::bytes_transferred ) );
 
@@ -241,6 +248,15 @@ namespace HWInterface
   bool SerialDriver::isOpen() noexcept
   {
     return serialPort.is_open();
+  }
+
+  bool SerialDriver::flush() noexcept
+  {
+#if defined( _WIN32 ) || defined( _WIN64 )
+    return static_cast<bool>(PurgeComm( serialPort.lowest_layer().native_handle(), ( PURGE_RXCLEAR | PURGE_TXCLEAR ) ) );
+#else
+    return false;
+#endif
   }
 
   Chimera::Status_t SerialDriver::open() noexcept

@@ -18,7 +18,7 @@ int main()
 
   auto info = bp.getInfo();
 
-  bp.getMode();
+  bp.bbInit();
 
   bp.close();
 
