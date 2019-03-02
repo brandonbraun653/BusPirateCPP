@@ -13,6 +13,7 @@
 
 /* Library Includes */
 #include <strtk/strtk.hpp>
+#include <spdlog/spdlog.h>
 
 /* Chimera Includes */
 #include <Chimera/serial.hpp>
@@ -47,90 +48,166 @@ namespace HWInterface
     static constexpr uint32_t minResetFirmwareMajorVer = 2; /**< Minimum firmware version needed to support reset '#' command */
 
     /*------------------------------------------------
-    The current supported Bus Pirate operational modes
+    Various class static variable initializers
     ------------------------------------------------*/
-    // std::array<ModeTypeBase, 2> supportedModes = { HiZMode(), SPIMode() };
-    //{ "HiZ", "1-WIRE", "UART", "I2C", "SPI", "JTAG", "RAW2WIRE", "RAW3WIRE", "PC KEYBOARD", "LCD" };
+    const std::string MenuCommands::info    = "i\n";
+    const std::string MenuCommands::reset   = "#\n";
+    const std::string MenuCommands::busMode = "m\n";
+    const std::string MenuCommands::ping    = "\n";
+
+    const std::string BitBangCommands::initSuccess = "BBIO";
+
 
     Device::Device( std::string &devicePort )
     {
       serial = std::make_shared<SerialDriver>( devicePort );
 
-      supportedModes.push_back( std::make_unique<HiZMode>() );
-      supportedModes.push_back( std::make_unique<SPIMode>() );
-
       connectedToSerial = false;
+      currentMode       = OperationalModes::BP_INVALID_MODE;
     }
 
     bool Device::open()
     {
+      bool opened = false;
+
       if ( !serial->isOpen() )
       {
         serial->begin();
         Chimera::Status_t error = serial->configure( 115200, CharWid::CW_8BIT, Parity::PAR_NONE, StopBits::SBITS_ONE,
                                                      FlowControl::FCTRL_NONE );
-        
+
+        /*------------------------------------------------
+        This flag controls whether or not the Bus Pirate will work. All
+        functions should be checking this variable before execution.
+        ------------------------------------------------*/
         connectedToSerial = ( error == Status::OK );
 
         /*------------------------------------------------
-        Make sure that we can talk to the device correctly. Occasionally there will be old data in the system serial buffer that
-        hasn't been cleared out yet. Boost does not provide a way to flush this, so the simple fix is just to try and read
-        things out again.
+        Immediately reset the board, which places the board into Terminal mode
         ------------------------------------------------*/
-        if ( error == Status::OK && reset() )
+        if ( connect() )
         {
-          for ( auto x = 0; x < MAX_CONNECT_ATTEMPTS; x++ )
-          {
-            if ( getInfo().isValid )
-            {
-              connectedToSerial = true;
-              break;
-            }
-            else
-            {
-              std::cout << "Retrying connection..." << std::endl;
-              boost::this_thread::sleep_for( boost::chrono::milliseconds( 500 ) );
-            }
-          }
+          opened      = true;
+          currentMode = OperationalModes::BP_MODE_HiZ;
+        }
+        else
+        {
+          spdlog::error( "Failed opening Bus Pirate device" );
         }
       }
+      else
+      {
+        opened = true;
+      }
 
-      return connectedToSerial;
+      return opened;
     }
 
     void Device::close()
     {
-      serial->end();
+      /*------------------------------------------------
+      In-case the user is not powering off the board, disconnect in a HiZ state
+      ------------------------------------------------*/
+      reset();
+
+      /*------------------------------------------------
+      Power off low level platform serial driver
+      ------------------------------------------------*/
+      serial->flush();
+      connectedToSerial = !( serial->end() == Status::OK );
+
+      spdlog::info( "Disconnected from Bus Pirate" );
     }
 
     bool Device::reset()
     {
-      bool result     = false;
-      std::string cmd = MenuCommands::reset;
-      std::string out = sendResponsiveCommand( cmd );
+      bool devReset = false;
 
-      /*------------------------------------------------
-      According to the docs, RESET should be printed if the
-      command was received/executed successfully.
-      ------------------------------------------------*/
-      if ( out.find( "RESET" ) != std::string::npos )
+      if ( isOpen() )
       {
-        result = true;
+        devReset = resetTerminal();
+
+        if ( !devReset )
+        {
+          devReset = resetBitBangRoot();
+
+          if ( !devReset )
+          {
+            devReset = resetBitBangHWMode();
+          }
+        }
+
+        if ( devReset )
+        {
+          spdlog::info( "Bus Pirate reset" );
+        }
+        else
+        {
+          spdlog::error( "Failed resetting Bus Pirate device" );
+        }
+
+        /*------------------------------------------------
+        The above commands don't read out all the serial data, so make sure other
+        functions don't accidentally get interpret it as part of their response.
+        ------------------------------------------------*/
+        serial->flush();
       }
 
-      return result;
+      return devReset;
     }
 
-    bool Device::isConnected()
+    bool Device::connect()
+    {
+      bool connected = false;
+
+      /*------------------------------------------------
+      Make sure that we can talk to the device correctly. Occasionally there will be old data in the system serial buffer that
+      hasn't been cleared out yet. Boost does not provide a way to flush this, so the simple fix is just to try and read
+      things out again.
+      ------------------------------------------------*/
+      if ( reset() )
+      {
+        for ( auto x = 0; x < MAX_CONNECT_ATTEMPTS; x++ )
+        {
+          if ( getInfo().isValid )
+          {
+            connected = true;
+            spdlog::info( "Connected to Bus Pirate {}", deviceInfo.hwVer );
+            break;
+          }
+          else
+          {
+            spdlog::info( "Retrying connection..." );
+            boost::this_thread::sleep_for( boost::chrono::milliseconds( 500 ) );
+          }
+        }
+      }
+
+      return connected;
+    }
+
+    bool Device::isOpen()
     {
       return connectedToSerial;
     }
 
-    Device::Info Device::getInfo()
+    void Device::clearTerminal()
+    {
+      auto dataField = reinterpret_cast<const uint8_t *>( MenuCommands::ping.data() );
+      auto dataSize  = MenuCommands::ping.size();
+
+      for ( auto x = 0; x < 3; x++ )
+      {
+        serial->write( dataField, dataSize );
+        Chimera::delayMilliseconds( 100 );
+      }
+    }
+
+    Info Device::getInfo()
     {
       Info info;
 
-      if ( isConnected() )
+      if ( isOpen() && serial->flush() )
       {
         std::regex numberOnlyRegex = std::regex( R"([\D])" );
         std::string cmd            = MenuCommands::info;
@@ -144,110 +221,114 @@ namespace HWInterface
         strtk::multiple_char_delimiter_predicate predicate( "\r\n" );
         strtk::split( predicate, rawOutput, strtk::range_to_type_back_inserter( tokenList ), split_opt );
 
-        /*------------------------------------------------
-        Pull out the Board version
-        ------------------------------------------------*/
-        /* Get the version as a string */
-        std::string line1 = tokenList.front();
-        std::deque<std::string> l1Tokens;
-        strtk::split( ' ', line1, strtk::range_to_type_back_inserter( l1Tokens ), split_opt );
-
-        info.hwVer = l1Tokens[ 2 ];
-        tokenList.pop_front();
-
-        /* Get the version as a number, expected format: vXXX */
-        std::string boardVerStr = std::regex_replace( info.hwVer, numberOnlyRegex, "" );
-        info.hwVerNum           = static_cast<uint32_t>( std::stoi( boardVerStr ) );
-        info.hwVerNumMajor      = static_cast<uint32_t>( std::stoi( info.hwVer.substr( 1, 1 ) ) );
-
-        /*------------------------------------------------
-        Pull out the Firmware and Bootloader Versions
-        ------------------------------------------------*/
-        /* Get the values as strings */
-        std::string line2 = tokenList.front();
-        std::deque<std::string> l2Tokens;
-        strtk::split( ' ', line2, strtk::range_to_type_back_inserter( l2Tokens ), split_opt );
-
-        info.firmwareVer   = l2Tokens[ 1 ];
-        info.bootLoaderVer = l2Tokens[ 4 ];
-        tokenList.pop_front();
-
-        /* Get the values as numbers: Convert to representation expecting vX.X */
-        std::string firmwareVerStr = std::regex_replace( info.firmwareVer, numberOnlyRegex, "" );
-        info.firmwareVerNum        = static_cast<uint32_t>( std::stoi( firmwareVerStr ) );
-        info.firmwareVerNumMajor   = static_cast<uint32_t>( std::stoi( info.firmwareVer.substr( 1, 1 ) ) );
-        info.firmwareVerNumMinor   = static_cast<uint32_t>( std::stoi( info.firmwareVer.substr( 3, 1 ) ) );
-
-        std::string bootloaderVerStr = std::regex_replace( info.bootLoaderVer, numberOnlyRegex, "" );
-        info.bootloaderVerNum        = static_cast<uint32_t>( std::stoi( bootloaderVerStr ) );
-        info.bootloaderVerNumMajor   = static_cast<uint32_t>( std::stoi( info.bootLoaderVer.substr( 1, 1 ) ) );
-        info.bootloaderVerNumMinor   = static_cast<uint32_t>( std::stoi( info.bootLoaderVer.substr( 3, 1 ) ) );
-
-        /*------------------------------------------------
-        Pull out the Device ID, Revision ID, and MCU Type
-        ------------------------------------------------*/
-        std::string line3 = tokenList.front();
-        std::deque<std::string> l3Tokens;
-        strtk::split( ' ', line3, strtk::range_to_type_back_inserter( l3Tokens ), split_opt );
-        tokenList.pop_front();
-
-        /*------------------------------------------------
-        Handle Device ID separately
-        ------------------------------------------------*/
-        std::string rawDevID = l3Tokens[ 0 ];
-        std::deque<std::string> devIDTokens;
-        strtk::split( ':', rawDevID, strtk::range_to_type_back_inserter( devIDTokens ), split_opt );
-
-        info.deviceID = devIDTokens[ 1 ];
-
-        /*------------------------------------------------
-        Handle Revision ID separately
-        ------------------------------------------------*/
-        std::string rawRevID = l3Tokens[ 1 ];
-        std::deque<std::string> revIDTokens;
-        strtk::split( ':', rawRevID, strtk::range_to_type_back_inserter( revIDTokens ), split_opt );
-
-        info.revID = revIDTokens[ 1 ];
-
-        /*------------------------------------------------
-        Handle MCU type separately
-        ------------------------------------------------*/
-        std::string mcu = l3Tokens[ 2 ] + ' ' + l3Tokens[ 3 ];
-        mcu.erase( std::remove( mcu.begin(), mcu.end(), '(' ), mcu.end() );
-        mcu.erase( std::remove( mcu.begin(), mcu.end(), ')' ), mcu.end() );
-
-        info.mcuVer = mcu;
-
-        /*------------------------------------------------
-        Validate the Board Version
-        ------------------------------------------------*/
-        /* Assume everything is OK and then negate if not. */
-        info.isValid = true;
-
-        if ( !std::any_of( knownBoardVer.begin(), knownBoardVer.end(), [info]( std::string &i ) { return i == info.hwVer; } ) )
+        if ( tokenList.size() )
         {
-          std::cout << "Unknown board version: " << info.hwVer << std::endl;
-          info.isValid = false;
-        }
+          /*------------------------------------------------
+          Pull out the Board version
+          ------------------------------------------------*/
+          /* Get the version as a string */
+          std::string line1 = tokenList.front();
+          std::deque<std::string> l1Tokens;
+          strtk::split( ' ', line1, strtk::range_to_type_back_inserter( l1Tokens ), split_opt );
 
-        /*------------------------------------------------
-        Validate the Firmware Version
-        ------------------------------------------------*/
-        if ( !std::any_of( knownFirmwareVer.begin(), knownFirmwareVer.end(),
-                           [info]( std::string &f ) { return f == info.firmwareVer; } ) )
-        {
-          std::cout << "Unknown firmware version: " << info.firmwareVer << std::endl;
-          info.isValid = false;
-        }
+          info.hwVer = l1Tokens[ 2 ];
+          tokenList.pop_front();
 
-        /*------------------------------------------------
-        Validate the Bootloader Version
-        ------------------------------------------------*/
-        if ( !std::any_of( knownBootloaderVer.begin(), knownBootloaderVer.end(),
-                           [info]( std::string &b ) { return b == info.bootLoaderVer; } ) )
-        {
-          std::cout << "Unknown bootloader version: " << info.bootLoaderVer << std::endl;
-          info.isValid = false;
+          /* Get the version as a number, expected format: vXXX */
+          std::string boardVerStr = std::regex_replace( info.hwVer, numberOnlyRegex, "" );
+          info.hwVerNum           = static_cast<uint32_t>( std::stoi( boardVerStr ) );
+          info.hwVerNumMajor      = static_cast<uint32_t>( std::stoi( info.hwVer.substr( 1, 1 ) ) );
+
+          /*------------------------------------------------
+          Pull out the Firmware and Bootloader Versions
+          ------------------------------------------------*/
+          /* Get the values as strings */
+          std::string line2 = tokenList.front();
+          std::deque<std::string> l2Tokens;
+          strtk::split( ' ', line2, strtk::range_to_type_back_inserter( l2Tokens ), split_opt );
+
+          info.firmwareVer   = l2Tokens[ 1 ];
+          info.bootLoaderVer = l2Tokens[ 4 ];
+          tokenList.pop_front();
+
+          /* Get the values as numbers: Convert to representation expecting vX.X */
+          std::string firmwareVerStr = std::regex_replace( info.firmwareVer, numberOnlyRegex, "" );
+          info.firmwareVerNum        = static_cast<uint32_t>( std::stoi( firmwareVerStr ) );
+          info.firmwareVerNumMajor   = static_cast<uint32_t>( std::stoi( info.firmwareVer.substr( 1, 1 ) ) );
+          info.firmwareVerNumMinor   = static_cast<uint32_t>( std::stoi( info.firmwareVer.substr( 3, 1 ) ) );
+
+          std::string bootloaderVerStr = std::regex_replace( info.bootLoaderVer, numberOnlyRegex, "" );
+          info.bootloaderVerNum        = static_cast<uint32_t>( std::stoi( bootloaderVerStr ) );
+          info.bootloaderVerNumMajor   = static_cast<uint32_t>( std::stoi( info.bootLoaderVer.substr( 1, 1 ) ) );
+          info.bootloaderVerNumMinor   = static_cast<uint32_t>( std::stoi( info.bootLoaderVer.substr( 3, 1 ) ) );
+
+          /*------------------------------------------------
+          Pull out the Device ID, Revision ID, and MCU Type
+          ------------------------------------------------*/
+          std::string line3 = tokenList.front();
+          std::deque<std::string> l3Tokens;
+          strtk::split( ' ', line3, strtk::range_to_type_back_inserter( l3Tokens ), split_opt );
+          tokenList.pop_front();
+
+          /*------------------------------------------------
+          Handle Device ID separately
+          ------------------------------------------------*/
+          std::string rawDevID = l3Tokens[ 0 ];
+          std::deque<std::string> devIDTokens;
+          strtk::split( ':', rawDevID, strtk::range_to_type_back_inserter( devIDTokens ), split_opt );
+
+          info.deviceID = devIDTokens[ 1 ];
+
+          /*------------------------------------------------
+          Handle Revision ID separately
+          ------------------------------------------------*/
+          std::string rawRevID = l3Tokens[ 1 ];
+          std::deque<std::string> revIDTokens;
+          strtk::split( ':', rawRevID, strtk::range_to_type_back_inserter( revIDTokens ), split_opt );
+
+          info.revID = revIDTokens[ 1 ];
+
+          /*------------------------------------------------
+          Handle MCU type separately
+          ------------------------------------------------*/
+          std::string mcu = l3Tokens[ 2 ] + ' ' + l3Tokens[ 3 ];
+          mcu.erase( std::remove( mcu.begin(), mcu.end(), '(' ), mcu.end() );
+          mcu.erase( std::remove( mcu.begin(), mcu.end(), ')' ), mcu.end() );
+
+          info.mcuVer = mcu;
+
+          /*------------------------------------------------
+          Validate the Board Version
+          ------------------------------------------------*/
+          /* Assume everything is OK and then negate if not. */
+          info.isValid = true;
+
+          if ( !std::any_of( knownBoardVer.begin(), knownBoardVer.end(),
+                             [info]( std::string &i ) { return i == info.hwVer; } ) )
+          {
+            std::cout << "Unknown board version: " << info.hwVer << std::endl;
+            info.isValid = false;
+          }
+
+          /*------------------------------------------------
+          Validate the Firmware Version
+          ------------------------------------------------*/
+          if ( !std::any_of( knownFirmwareVer.begin(), knownFirmwareVer.end(),
+                             [info]( std::string &f ) { return f == info.firmwareVer; } ) )
+          {
+            std::cout << "Unknown firmware version: " << info.firmwareVer << std::endl;
+            info.isValid = false;
+          }
+
+          /*------------------------------------------------
+          Validate the Bootloader Version
+          ------------------------------------------------*/
+          if ( !std::any_of( knownBootloaderVer.begin(), knownBootloaderVer.end(),
+                             [info]( std::string &b ) { return b == info.bootLoaderVer; } ) )
+          {
+            std::cout << "Unknown bootloader version: " << info.bootLoaderVer << std::endl;
+            info.isValid = false;
+          }
         }
       }
       else
@@ -259,61 +340,34 @@ namespace HWInterface
       return info;
     }
 
-    ModeBase_sPtr Device::getMode()
-    {
-      ModeBase_sPtr resultMode;
-
-      if ( isConnected() )
-      {
-        /*------------------------------------------------
-        Ping the device a few times so the returned string contains the
-        current mode the device is in.
-        ------------------------------------------------*/
-        std::string reportedMode;
-        std::string cmd = MenuCommands::ping;
-
-        for ( auto x = 0; x < 3; x++ )
-        {
-          reportedMode.clear();
-          reportedMode = sendResponsiveCommand( cmd );
-        }
-
-        /*------------------------------------------------
-        Parse the mode
-        ------------------------------------------------*/
-        for ( ModeBase_sPtr &x : supportedModes )
-        {
-          if ( reportedMode.find( x->modeString() ) != std::string::npos )
-          {
-            resultMode = x;
-          }
-        }
-      }
-      return resultMode;
-    }
-
     void Device::sendCommand( const std::string &cmd ) noexcept
     {
       sendResponsiveCommand( cmd );
+      serial->flush();
     }
 
     void Device::sendCommand( const std::vector<uint8_t> &cmd ) noexcept
     {
-      sendResponsiveCommand( cmd );
+      sendResponsiveCommand( cmd, static_cast<uint32_t>( cmd.size() ) );
+      serial->flush();
     }
 
     std::string Device::sendResponsiveCommand( const std::string &cmd, const boost::regex &delimiter ) noexcept
     {
-      std::vector<uint8_t> readBuffer( 100 );
+      std::vector<uint8_t> readBuffer;
+      std::string response;
 
-      if ( isConnected() )
+      /*------------------------------------------------
+      Flush the serial port as we don't need data from the
+      previous command straying into the response from this one.
+      ------------------------------------------------*/
+      if ( isOpen() )
       {
-        //bool result = serial->flush();
         serial->write( reinterpret_cast<const uint8_t *>( cmd.c_str() ), cmd.length() );
 
         if ( delimiter.empty() )
         {
-          serial->readUntil( readBuffer, boost_modeRegex );
+          serial->readUntil( readBuffer, terminalModeRegex );
         }
         else
         {
@@ -325,72 +379,154 @@ namespace HWInterface
         back to us + that little 'HiZ>' string that we all know means
         'enter more things here'. (What's the proper name for that anyways?)
         Neither are part of the actual output so they are removed.
-  
+
+
         HiZ><our_command>\r\n
         <actual output we want>\r\n
         HiZ>
         ------------------------------------------------*/
-        constexpr size_t newline_char_len = 2;
+        if ( readBuffer.size() )
+        {
+          constexpr size_t newline_char_len = 2;
 
-        /* Remove our command from the front. Expects it to have a '\n' appended on. */
-        readBuffer.erase( readBuffer.begin(), ( readBuffer.begin() + cmd.length() - 1 ) + newline_char_len );
+          /* Remove our command from the front. Expects it to have a '\n' appended on. */
+          readBuffer.erase( readBuffer.begin(), ( readBuffer.begin() + cmd.length() - 1 ) + newline_char_len );
+
+          response = std::string( readBuffer.begin(), readBuffer.end() );
+        }
       }
       else
       {
-        std::cout << "Could not send command. Bus Pirate not connected." << std::endl;
+        spdlog::error( "Could not send command. There was a problem with the serial port." );
       }
 
-      return std::string( readBuffer.begin(), readBuffer.end() );
+      return response;
     }
 
-    std::vector<boost::uint8_t> Device::sendResponsiveCommand( const std::vector<uint8_t> &cmd ) noexcept
+    std::vector<uint8_t> Device::sendResponsiveCommand( const std::vector<uint8_t> &cmd,
+                                                        const boost::regex &delimiter ) noexcept
     {
       std::vector<uint8_t> readBuffer;
 
-      if ( isConnected() )
+      if ( isOpen() )
       {
-        serial->flush();
         serial->write( cmd.data(), cmd.size() );
-        serial->readUntil( readBuffer, boost_modeRegex );
+
+        if ( delimiter.empty() )
+        {
+          serial->readUntil( readBuffer, terminalModeRegex );
+        }
+        else
+        {
+          serial->readUntil( readBuffer, delimiter );
+        }
       }
       else
       {
-        std::cout << "Could not send command. Bus Pirate not connected." << std::endl;
+        spdlog::error( "Could not send command. There was a problem with the serial port." );
       }
 
       return readBuffer;
     }
 
-    bool Device::bbInit()
+    std::vector<boost::uint8_t> Device::sendResponsiveCommand( const std::vector<uint8_t> &cmd, const uint32_t length ) noexcept
     {
-      const std::string enter            = MenuCommands::ping;
-      const std::string expectedResponse = "BBIO1";
-      std::vector<uint8_t> output;
+      std::vector<uint8_t> readBuffer( length );
 
-      /*------------------------------------------------
-      Ensure that we are at the terminal entry point
-      ------------------------------------------------*/
-      for ( auto x = 0; x < 10; x++ )
+      if ( isOpen() )
       {
-        sendCommand( enter );
+        serial->write( cmd.data(), cmd.size() );
+        serial->read( readBuffer.data(), length );
       }
-      reset();
+      else
+      {
+        spdlog::error( "Could not send command. There was a problem with the serial port." );
+      }
 
-      /*------------------------------------------------
-      Send the init command a few times and look for the expected response
-      ------------------------------------------------*/
-      std::vector<uint8_t> initCmd;
-      initCmd.assign( 20, BitBangCommands::init );
-
-      auto result = sendResponsiveCommand( initCmd );
-
-
-      return false;
+      return readBuffer;
     }
 
-    bool Device::bbSPI()
+    bool Device::terminalInit()
     {
-      return false;
+      return reset();
+    }
+
+    bool Device::bbInit()
+    {
+      bool result                        = false;
+      const std::string expectedResponse = "BBIO1";
+
+      if ( terminalInit() )
+      {
+        std::vector<uint8_t> output;
+        std::vector<uint8_t> initCmd;
+
+        initCmd.assign( 20, BitBangCommands::init );
+        output = sendResponsiveCommand( initCmd, boost::regex{ "BBIO1" } );
+        std::string actualResponse( output.begin(), output.end() );
+
+        if ( actualResponse.find( expectedResponse ) != std::string::npos )
+        {
+          result      = true;
+          currentMode = OperationalModes::BP_MODE_BIT_BANG_ROOT;
+        }
+      }
+      else
+      {
+        spdlog::error( "Failed entering Bit Bang mode" );
+      }
+
+      return result;
+    }
+
+    bool Device::bbEnterSPI()
+    {
+      bool modeEntered = false;
+
+      if ( isOpen() )
+      {
+        /*------------------------------------------------
+        Automatically transition the device to BitBang mode if not there
+        ------------------------------------------------*/
+        if ( currentMode != OperationalModes::BP_MODE_BIT_BANG_ROOT )
+        {
+          bbInit();
+        }
+
+        /*------------------------------------------------
+        Transition into raw BitBang SPI mode. Success is indicated by the
+        Bus Pirate returning "SPIx" where x is the current SPI version number.
+        ------------------------------------------------*/
+        if ( currentMode == OperationalModes::BP_MODE_BIT_BANG_ROOT )
+        {
+          std::vector<uint8_t> cmd = { BitBangCommands::enterSPI };
+          auto response            = sendResponsiveCommand( cmd, boost::regex{ "(SPI)." } );
+
+          std::string strOut( response.begin(), response.end() );
+          std::string substr = "SPI";
+
+          if ( strOut.find( substr ) != std::string::npos )
+          {
+            modeEntered = true;
+            currentMode = OperationalModes::BP_MODE_SPI_BIT_BANG;
+          }
+        }
+
+        if ( modeEntered )
+        {
+          spdlog::info( "Entered Bit Bang SPI mode" );
+        }
+        else
+        {
+          spdlog::error( "Failed entering Bit Bang SPI mode" );
+        }
+      }
+      else
+      {
+        spdlog::error( "Could not send command. There was a problem with the serial port." );
+      }
+
+      return modeEntered;
     }
 
     bool Device::bbI2C()
@@ -418,59 +554,69 @@ namespace HWInterface
       return false;
     }
 
-    bool Device::bbReset()
+    bool Device::bbExitHWMode()
     {
-      return false;
+      return resetBitBangHWMode();
     }
 
-    bool Device::bbCfgPins( const uint8_t &cfg )
+    bool Device::resetTerminal()
     {
-      return false;
+      bool devReset = false;
+      std::vector<uint8_t> termCmd;
+      std::vector<uint8_t> termOut;
+      std::string termStr;
+
+      clearTerminal();
+      serial->flush();
+
+      termCmd = std::vector<uint8_t>( MenuCommands::reset.begin(), MenuCommands::reset.end() );
+      termOut = sendResponsiveCommand( termCmd, 10 );
+      termStr = std::string( termOut.begin(), termOut.end() );
+
+      if ( termStr.find( "RESET" ) != std::string::npos )
+      {
+        devReset = true;
+      }
+
+      return devReset;
     }
 
-    bool Device::bbExit()
+    bool Device::resetBitBangRoot()
     {
-      return false;
+      bool devReset = false;
+      std::vector<uint8_t> bbCmd;
+      std::vector<uint8_t> bbOut;
+
+      serial->flush();
+      bbCmd = { BitBangCommands::reset };
+      bbOut = sendResponsiveCommand( bbCmd, sizeof( BitBangCommands::reset ) );
+
+      if ( !devReset && bbOut.size() && ( bbOut[ 0 ] == BitBangCommands::success ) )
+      {
+        devReset = true;
+      }
+
+      return devReset;
     }
 
-    std::string HiZMode::modeString() noexcept
+    bool Device::resetBitBangHWMode()
     {
-      return std::string( "HiZ" );
-    }
+      bool devReset = false;
+      std::vector<uint8_t> bbCmd;
+      std::vector<uint8_t> bbOut;
+      std::string bbStr;
 
-    std::string HiZMode::delimiter() noexcept
-    {
-      return std::string( "\r\nHiZ>" );
-    }
+      serial->flush();
+      bbCmd = { BitBangCommands::init };
+      bbOut = sendResponsiveCommand( bbCmd, static_cast<uint32_t>( BitBangCommands::initSuccess.size() ) );
+      bbStr = std::string( bbOut.begin(), bbOut.end() );
 
-    std::regex HiZMode::regex() noexcept
-    {
-      return std::regex( "(HiZ>)" );
-    }
+      if ( bbStr.find( BitBangCommands::initSuccess ) != std::string::npos )
+      {
+        devReset = resetBitBangRoot();
+      }
 
-    HWInterface::BusPirate::OperationalModes HiZMode::modeType() noexcept
-    {
-      return OperationalModes::BP_MODE_HiZ;
-    }
-
-    std::string SPIMode::modeString() noexcept
-    {
-      return std::string( "SPI" );
-    }
-
-    std::string SPIMode::delimiter() noexcept
-    {
-      return std::string( "\r\nSPI>" );
-    }
-
-    std::regex SPIMode::regex() noexcept
-    {
-      return std::regex( "(SPI>)" );
-    }
-
-    HWInterface::BusPirate::OperationalModes SPIMode::modeType() noexcept
-    {
-      return OperationalModes::BP_MODE_SPI;
+      return devReset;
     }
 
   }  // namespace BusPirate

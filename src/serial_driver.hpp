@@ -32,8 +32,7 @@ namespace HWInterface
   class SerialDriver : public Chimera::Serial::Interface
   {
   public:
-
-    SerialDriver( std::string &device );
+    SerialDriver( std::string &device, const uint32_t delay_mS = 5 );
     ~SerialDriver() = default;
 
     Chimera::Status_t begin( const Chimera::Serial::Modes txMode = Chimera::Serial::Modes::BLOCKING,
@@ -70,19 +69,31 @@ namespace HWInterface
 
     /**
      *	Flushes the system TX and RX serial port buffers
-     *	
+     *
      *	@return bool: True if success, false if not
      */
-     bool flush() noexcept;
+    bool flush() noexcept;
+
+
+    /**
+     *	Clears all configuration settings and re-opens the serial port
+     *
+     *	@return bool: True if success, false if not
+     */
+    bool reset() noexcept;
 
   private:
     std::string serialDevice;
+
+    uint32_t ioDelay_mS; /**< Inserts a delay into IO operations so slower devices can keep up */
 
 
     boost::asio::io_service io;
     boost::asio::serial_port serialPort;
     boost::asio::deadline_timer timer;
     boost::asio::streambuf readData;
+
+    boost::asio::streambuf inputStream;
 
     Chimera::Status_t open() noexcept;
 
@@ -92,6 +103,6 @@ namespace HWInterface
     Chimera::Status_t asyncResult;
     size_t bytesTransferred;
   };
-}    // namespace HWInterface
+}  // namespace HWInterface
 
 #endif /* !BUS_PIRATE_CPP_SERIAL_DRIVER_HPP */

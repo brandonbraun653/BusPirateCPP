@@ -11,6 +11,9 @@
 /* Module Includes */
 #include "serial_driver.hpp"
 
+/* Library Includes */
+#include <spdlog/spdlog.h>
+
 /* C++ Includes */
 #include <iostream>
 #include <vector>
@@ -19,11 +22,14 @@
 
 /* Boost Includes */
 #include <boost/bind.hpp>
+#include <boost/chrono.hpp>
+#include <boost/thread.hpp>
 #include <boost/asio/serial_port_base.hpp>
 
 /* Windows Includes */
 #if defined( _WIN32 ) || defined( _WIN64 )
 #include <Windows.h>
+#include <Ntddser.h>
 #endif
 
 using namespace Chimera;
@@ -31,9 +37,10 @@ using namespace Chimera::Serial;
 
 namespace HWInterface
 {
-  SerialDriver::SerialDriver( std::string &device ) : io(), serialPort( io ), timer( io )
+  SerialDriver::SerialDriver( std::string &device, const uint32_t delay_mS ) : io(), serialPort( io ), timer( io )
   {
     serialDevice = device;
+    ioDelay_mS   = delay_mS;
   }
 
   Chimera::Status_t SerialDriver::begin( const Chimera::Serial::Modes txMode, const Chimera::Serial::Modes rxMode ) noexcept
@@ -118,11 +125,18 @@ namespace HWInterface
 
   Chimera::Status_t SerialDriver::end() noexcept
   {
-    Status_t error = Status::OK;
-
-    serialPort.close();
-
-    return error;
+    try
+    {
+      io.reset();
+      timer.cancel();
+      serialPort.cancel();
+      serialPort.close();
+    }
+    catch ( const boost::system::system_error &err )
+    {
+      spdlog::error( "{}", err.what() );
+    }
+    return Status::OK;
   }
 
   Chimera::Status_t SerialDriver::setBaud( const uint32_t buad ) noexcept
@@ -139,54 +153,74 @@ namespace HWInterface
   Chimera::Status_t SerialDriver::write( const uint8_t *const buffer, const size_t length, const uint32_t timeout_mS ) noexcept
   {
     boost::asio::write( serialPort, boost::asio::buffer( buffer, length ) );
+    boost::this_thread::sleep_for( boost::chrono::milliseconds( ioDelay_mS ) );
     return Status::OK;
   }
 
   Chimera::Status_t SerialDriver::read( uint8_t *const buffer, const size_t length, const uint32_t timeout_mS ) noexcept
   {
-    /*------------------------------------------------
-    Start the asynchronous read
-    ------------------------------------------------*/
-    boost::asio::async_read( serialPort, boost::asio::buffer( buffer, length ),
-                             boost::bind( &SerialDriver::callback_readComplete, this, boost::asio::placeholders::error,
-                                          boost::asio::placeholders::bytes_transferred ) );
-
-    /*------------------------------------------------
-    Initialize the timeout service
-    ------------------------------------------------*/
-    timer.expires_from_now( boost::posix_time::milliseconds( timeout_mS ) );
-    timer.async_wait( boost::bind( &SerialDriver::callback_timeoutExpired, this, boost::asio::placeholders::error ) );
-
-    /*------------------------------------------------
-    Periodically grab updates from the io_service. Updates
-    are propagated through the class callback_*() functions.
-    ------------------------------------------------*/
-    asyncResult      = Status::RX_IN_PROGRESS;
-    bytesTransferred = 0;
-
-    while ( asyncResult == Status::RX_IN_PROGRESS )
+    if ( serialPort.is_open() )
     {
-      io.run_one();
+      /*------------------------------------------------
+      The io_service must be reset before reuse
+      https://stackoverflow.com/questions/35643311/why-must-io-servicereset-be-called
+      ------------------------------------------------*/
+      io.restart();
 
-      switch ( asyncResult )
+      /*------------------------------------------------
+      Start the asynchronous read
+      ------------------------------------------------*/
+      boost::asio::async_read( serialPort, boost::asio::buffer( buffer, length ),
+                               boost::bind( &SerialDriver::callback_readComplete, this, boost::asio::placeholders::error,
+                                            boost::asio::placeholders::bytes_transferred ) );
+
+      /*------------------------------------------------
+      Initialize the timeout service
+      ------------------------------------------------*/
+      timer.expires_from_now( boost::posix_time::milliseconds( timeout_mS ) );
+      timer.async_wait( boost::bind( &SerialDriver::callback_timeoutExpired, this, boost::asio::placeholders::error ) );
+
+      /*------------------------------------------------
+      Periodically grab updates from the io_service. Updates
+      are propagated through the class callback_*() functions.
+      ------------------------------------------------*/
+      asyncResult      = Status::RX_IN_PROGRESS;
+      bytesTransferred = 0;
+
+      while ( asyncResult == Status::RX_IN_PROGRESS )
       {
-        case Status::RX_COMPLETE:
-          timer.cancel();
-          break;
+        io.run_one();
 
-        case Status::UNKNOWN_ERROR:
-          timer.cancel();
-          serialPort.cancel();
-          break;
+        switch ( asyncResult )
+        {
+          case Status::RX_COMPLETE:
+            timer.cancel();
+            break;
 
-        case Status::TIMEOUT:
-          serialPort.cancel();
-          break;
+          case Status::TIMEOUT:
+            serialPort.cancel();
+            break;
 
-        case Status::RX_IN_PROGRESS:
-        default:
-          break;
+          case Status::UNKNOWN_ERROR:
+            timer.cancel();
+            serialPort.cancel();
+            break;
+
+          case Status::RX_IN_PROGRESS:
+          default:
+            break;
+        }
       }
+
+      /*------------------------------------------------
+      Upon exiting the above code, the io_service will still report outstanding work and
+      error out further operations. Allow the io_service to tidy itself up.
+      ------------------------------------------------*/
+      io.run();
+    }
+    else
+    {
+      asyncResult = Status::FAILED_READ;
     }
 
     return asyncResult;
@@ -195,51 +229,72 @@ namespace HWInterface
   Chimera::Status_t SerialDriver::readUntil( std::vector<uint8_t> &buffer, const boost::regex &expr,
                                              const uint32_t timeout_mS ) noexcept
   {
-    boost::asio::dynamic_vector_buffer<uint8_t, std::allocator<uint8_t>> testvar = boost::asio::dynamic_buffer( buffer );
-    
-    /*------------------------------------------------
-    Start the asynchronous read
-    ------------------------------------------------*/
-    boost::asio::async_read_until( serialPort, testvar , expr,
-                                   boost::bind( &SerialDriver::callback_readComplete, this, boost::asio::placeholders::error,
-                                                boost::asio::placeholders::bytes_transferred ) );
-
-    /*------------------------------------------------
-    Initialize the timeout service
-    ------------------------------------------------*/
-    timer.expires_from_now( boost::posix_time::milliseconds( timeout_mS ) );
-    timer.async_wait( boost::bind( &SerialDriver::callback_timeoutExpired, this, boost::asio::placeholders::error ) );
-
-    /*------------------------------------------------
-    Periodically grab updates from the io_service. Updates
-    are propagated through the class callback_*() functions.
-    ------------------------------------------------*/
-    asyncResult      = Status::RX_IN_PROGRESS;
-    bytesTransferred = 0;
-
-    while ( asyncResult == Status::RX_IN_PROGRESS )
+    if ( serialPort.is_open() )
     {
-      io.run_one();
+      /*------------------------------------------------
+      The io_service must be reset before ruse
+      https://stackoverflow.com/questions/35643311/why-must-io-servicereset-be-called
+      ------------------------------------------------*/
+      io.restart();
 
-      switch ( asyncResult )
+      /*------------------------------------------------
+      Start the asynchronous read
+      ------------------------------------------------*/
+      boost::asio::async_read_until( serialPort, inputStream, expr,
+                                     boost::bind( &SerialDriver::callback_readComplete, this, boost::asio::placeholders::error,
+                                                  boost::asio::placeholders::bytes_transferred ) );
+
+      /*------------------------------------------------
+      Initialize the timeout service
+      ------------------------------------------------*/
+      timer.expires_from_now( boost::posix_time::milliseconds( timeout_mS ) );
+      timer.async_wait( boost::bind( &SerialDriver::callback_timeoutExpired, this, boost::asio::placeholders::error ) );
+
+      /*------------------------------------------------
+      Periodically grab updates from the io_service. Updates
+      are propagated through the class callback_*() functions.
+      ------------------------------------------------*/
+      asyncResult      = Status::RX_IN_PROGRESS;
+      bytesTransferred = 0;
+
+      while ( asyncResult == Status::RX_IN_PROGRESS )
       {
-        case Status::RX_COMPLETE:
-          timer.cancel();
-          break;
+        io.run_one();
 
-        case Status::UNKNOWN_ERROR:
-          timer.cancel();
-          serialPort.cancel();
-          break;
+        switch ( asyncResult )
+        {
+          case Status::RX_COMPLETE:
+            timer.cancel();
 
-        case Status::TIMEOUT:
-          serialPort.cancel();
-          break;
+            buffer.resize( inputStream.size(), 0 );
+            boost::asio::buffer_copy( boost::asio::buffer( buffer ), inputStream.data() );
+            inputStream.consume( inputStream.size() );
+            break;
 
-        case Status::RX_IN_PROGRESS:
-        default:
-          break;
+          case Status::TIMEOUT:
+            serialPort.cancel();
+            break;
+
+          case Status::UNKNOWN_ERROR:
+            timer.cancel();
+            serialPort.cancel();
+            break;
+
+          case Status::RX_IN_PROGRESS:
+          default:
+            break;
+        }
       }
+
+      /*------------------------------------------------
+      Upon exiting the above code, the io_service will still report outstanding work and
+      error out further operations. Allow the io_service to tidy itself up.
+      ------------------------------------------------*/
+      io.run();
+    }
+    else
+    {
+      asyncResult = Status::FAILED_READ;
     }
 
     return asyncResult;
@@ -252,11 +307,28 @@ namespace HWInterface
 
   bool SerialDriver::flush() noexcept
   {
+    /*------------------------------------------------
+    Clears the input stream effectively erasing the object's cache of old data
+    ------------------------------------------------*/
+    inputStream.consume( inputStream.size() );
+
+    /*------------------------------------------------
+    Platform specific serial port driver buffer clearing
+    ------------------------------------------------*/
 #if defined( _WIN32 ) || defined( _WIN64 )
-    return static_cast<bool>(PurgeComm( serialPort.lowest_layer().native_handle(), ( PURGE_RXCLEAR | PURGE_TXCLEAR ) ) );
+    HANDLE hSerial = serialPort.lowest_layer().native_handle();
+    return static_cast<bool>( PurgeComm( hSerial, ( PURGE_RXCLEAR | PURGE_TXCLEAR ) ) );
 #else
     return false;
 #endif
+  }
+
+  bool SerialDriver::reset() noexcept
+  {
+    serialPort.cancel();
+    io.reset();
+
+    return open();
   }
 
   Chimera::Status_t SerialDriver::open() noexcept
@@ -270,8 +342,9 @@ namespace HWInterface
         serialPort.open( serialDevice );
       }
     }
-    catch ( const boost::system::system_error & )
+    catch ( const boost::system::system_error &err )
     {
+      std::cout << err.what() << std::endl;
       error = Status::FAILED_OPEN;
     }
 
@@ -286,7 +359,6 @@ namespace HWInterface
     {
       asyncResult            = Status::RX_COMPLETE;
       this->bytesTransferred = bytesTransferred;
-      return;
     }
   }
 
@@ -298,4 +370,4 @@ namespace HWInterface
     }
   }
 
-}    // namespace HWInterface
+}  // namespace HWInterface
