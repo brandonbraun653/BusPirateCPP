@@ -47,16 +47,70 @@ namespace HWInterface
     class MenuCommands
     {
     public:
-      static constexpr auto info    = "i\n";
-      static constexpr auto reset   = "#\n";
-      static constexpr auto busMode = "m\n";
-      static constexpr auto ping    = "\n";
+      static constexpr auto info    = "i\n"; /**< Hardware, firmware, and microcontroller version information */
+      static constexpr auto reset   = "#\n"; /**< Resets the board (firmware V2.0+) */
+      static constexpr auto busMode = "m\n"; /**< Sets the bus mode (1-Wire, SPI, I2C, JTAG, UART, etc). */
+      static constexpr auto ping    = "\n";  /**< Simulates the user mashing the 'enter' key */
     };
 
     class BitBangCommands
     {
     public:
-      static constexpr uint8_t init = 0x00;
+      static constexpr uint8_t init  = 0x00; /**< Command that when repeated, enters bit-bang mode */
+      static constexpr uint8_t success = 0x01; /**< Indicates that a command succeeded */
+      static constexpr uint8_t reset = 0x0F; /**< Resets the Bus Pirate and returns to the user terminal */
+    };
+
+    // class OperationalModes
+    //{
+    // public:
+    //
+    //};
+
+    struct Info
+    {
+      bool isValid;
+
+      std::string hwVer;
+      std::string firmwareVer;
+      std::string bootLoaderVer;
+      std::string deviceID;
+      std::string revID;
+      std::string mcuVer;
+
+      uint32_t hwVerNum;
+      uint32_t hwVerNumMajor;
+
+      uint32_t firmwareVerNum;
+      uint32_t firmwareVerNumMajor;
+      uint32_t firmwareVerNumMinor;
+
+      uint32_t bootloaderVerNum;
+      uint32_t bootloaderVerNumMajor;
+      uint32_t bootloaderVerNumMinor;
+
+      Info()
+      {
+        isValid = false;
+
+        hwVer         = "N/A";
+        bootLoaderVer = "N/A";
+        deviceID      = "N/A";
+        firmwareVer   = "N/A";
+        mcuVer        = "N/A";
+        revID         = "N/A";
+
+        hwVerNum      = 0;
+        hwVerNumMajor = 0;
+
+        firmwareVerNum      = 0;
+        firmwareVerNumMajor = 0;
+        firmwareVerNumMinor = 0;
+
+        bootloaderVerNum      = 0;
+        bootloaderVerNumMajor = 0;
+        bootloaderVerNumMinor = 0;
+      }
     };
 
     enum class OperationalModes : uint8_t
@@ -66,6 +120,7 @@ namespace HWInterface
       BP_MODE_UART,
       BP_MODE_I2C,
       BP_MODE_SPI,
+      BP_MODE_SPI_BIT_BANG,
       BP_MODE_JTAG,
       BP_MODE_RAW2WIRE,
       BP_MODE_RAW3WIRE,
@@ -74,6 +129,12 @@ namespace HWInterface
 
       BP_INVALID_MODE,
       BP_NUM_MODES
+    };
+
+    enum class InteractionMode : uint8_t
+    {
+      MODE_TERMINAL,
+      MODE_BIT_BANG
     };
 
     class ModeBase
@@ -153,57 +214,12 @@ namespace HWInterface
       friend class I2C;
       friend class UART;
 
-      struct Info
-      {
-        bool isValid;
-
-        std::string hwVer;
-        std::string firmwareVer;
-        std::string bootLoaderVer;
-        std::string deviceID;
-        std::string revID;
-        std::string mcuVer;
-
-        uint32_t hwVerNum;
-        uint32_t hwVerNumMajor;
-
-        uint32_t firmwareVerNum;
-        uint32_t firmwareVerNumMajor;
-        uint32_t firmwareVerNumMinor;
-
-        uint32_t bootloaderVerNum;
-        uint32_t bootloaderVerNumMajor;
-        uint32_t bootloaderVerNumMinor;
-
-        Info()
-        {
-          isValid = false;
-
-          hwVer         = "N/A";
-          bootLoaderVer = "N/A";
-          deviceID      = "N/A";
-          firmwareVer   = "N/A";
-          mcuVer        = "N/A";
-          revID         = "N/A";
-
-          hwVerNum      = 0;
-          hwVerNumMajor = 0;
-
-          firmwareVerNum      = 0;
-          firmwareVerNumMajor = 0;
-          firmwareVerNumMinor = 0;
-
-          bootloaderVerNum      = 0;
-          bootloaderVerNumMajor = 0;
-          bootloaderVerNumMinor = 0;
-        }
-      };
-
       Device( std::string &devicePort );
       ~Device() = default;
 
       /**
-       *  Opens a connection to the device.
+       *  Opens a connection to the device. By default, clears all settings and
+       *  leaves the device in the user terminal in HiZ mode.
        *
        *  @return True if connected, false if not
        */
@@ -224,12 +240,23 @@ namespace HWInterface
        */
       bool reset();
 
+
+      bool connect();
+
       /**
        *	Checks if the device has been successfully connected
        *
        *	@return True if connected, false if not
        */
       bool isConnected();
+
+
+      /**
+       *	Clears the terminal interface by sending 'enter' a few times
+       *
+       *	@return void
+       */
+      void clearTerminal();
 
       /**
        *  Gets the device information by sending the 'i' command
@@ -243,7 +270,15 @@ namespace HWInterface
        *
        *	@return ModeTypeBase_sPtr
        */
-      ModeBase_sPtr getMode();
+      ModeBase_sPtr getSystemMode();
+
+      /**
+       *	Figures out if the device is in terminal mode or bit bang mode. Will automatically
+       *	reset bit bang mode if already in that mode.
+       *
+       *	@return HWInterface::BusPirate::InteractionMode
+       */
+       InteractionMode getInteractionMode();
 
       /**
        *	Sends a command to the device
@@ -279,7 +314,7 @@ namespace HWInterface
        *	@param[in]	cmd         Command to be sent that ends with '\n'.
        *	@return std::vector<uint8_t>
        */
-      std::vector<uint8_t> sendResponsiveCommand( const std::vector<uint8_t> &cmd ) noexcept;
+      std::vector<uint8_t> sendResponsiveCommand( const std::vector<uint8_t> &cmd, const boost::regex &delimiter = boost::regex{} ) noexcept;
 
       /**
        *	Enters bit bang mode
@@ -303,50 +338,50 @@ namespace HWInterface
       bool bbI2C();
 
       /**
-       *	
-       *	
+       *
+       *
        *	@return bool
        */
-       bool bbUART();
+      bool bbUART();
 
       /**
-       *	
-       *	
+       *
+       *
        *	@return bool
        */
-       bool bb1Wire();
+      bool bb1Wire();
 
       /**
-       *	
-       *	
+       *
+       *
        *	@return bool
        */
-       bool bbRawWire();
+      bool bbRawWire();
 
       /**
-       *	
-       *	
+       *
+       *
        *	@return bool
        */
-       bool bbJTAG();
+      bool bbJTAG();
 
       /**
        *  Performs a hardware reset of the Bus Pirate and returns to the standard
        *  input terminal. bbInit() must be called again to re-enter bit bang mode.
-       *	
+       *
        *	@return bool: true if success, false if not
        */
-       bool bbReset();
+      bool bbReset();
 
       /**
        *	Manually sets output/input pin configurations.
        *  Input parameter should set (output) or clear (input) the lower 5 bits in this order:
        *  AUX|MOSI|CLK|MISO|CS
-       *	
+       *
        *	@param[in]	cfg         The pin configuration option for the Bus Pirate
-       *	@return bool: true if success, false if not 
+       *	@return bool: true if success, false if not
        */
-       bool bbCfgPins( const uint8_t &cfg );
+      bool bbCfgPins( const uint8_t &cfg );
 
       /**
        *	Exits from whatever raw mode the user was in and goes back to bit bang mode
