@@ -60,6 +60,7 @@ namespace HWInterface
       supportedModes.push_back( std::make_unique<SPIMode>() );
 
       connectedToSerial = false;
+      currentMode = OperationalModes::BP_INVALID_MODE;
     }
 
     bool Device::open()
@@ -81,9 +82,10 @@ namespace HWInterface
         /*------------------------------------------------
         Immediately reset the board, which places the board into Terminal mode
         ------------------------------------------------*/
-        if ( connectedToSerial )
+        if ( connectedToSerial && reset() )
         {
-          opened = reset();
+          opened = true;
+          currentMode = OperationalModes::BP_MODE_HiZ;
         }
       }
       else
@@ -118,8 +120,8 @@ namespace HWInterface
       this fail to reset the board, we are likely already in terminal mode.
       ------------------------------------------------*/
       serial->flush();
-      std::vector<uint8_t> bbCmd = { BitBangCommands::reset, '\n' };
-      std::vector<uint8_t> bbOut = sendResponsiveCommand( bbCmd );
+      std::vector<uint8_t> bbCmd = { BitBangCommands::reset };
+      std::vector<uint8_t> bbOut = sendResponsiveCommand( bbCmd, 1 );
 
       if ( std::find( bbOut.begin(), bbOut.end(), BitBangCommands::success ) != bbOut.end() )
       {
@@ -454,6 +456,24 @@ namespace HWInterface
       return readBuffer;
     }
 
+    std::vector<boost::uint8_t> Device::sendResponsiveCommand( const std::vector<uint8_t> &cmd, const uint32_t length )
+    {
+      std::vector<uint8_t> readBuffer(length);
+
+      if ( isConnected() )
+      {
+        serial->write( cmd.data(), cmd.size() );
+        serial->read(readBuffer.data(), length);
+      }
+      else
+      {
+        std::cout << "Could not send command. There was a problem with the serial port." << std::endl;
+      }
+
+      return readBuffer;
+
+    }
+
     bool Device::bbInit()
     {
       bool result                        = false;
@@ -471,15 +491,44 @@ namespace HWInterface
         if ( actualResponse.find( expectedResponse ) != std::string::npos )
         {
           result = true;
+          currentMode = OperationalModes::BP_MODE_BIT_BANG_ROOT;
         }
       }
 
       return result;
     }
 
-    bool Device::bbSPI()
+    bool Device::bbEnterSPI()
     {
-      return false;
+      bool modeEntered = false;
+
+      /*------------------------------------------------
+      Automatically transition the device to BitBang mode if not there
+      ------------------------------------------------*/
+      if (currentMode != OperationalModes::BP_MODE_BIT_BANG_ROOT )
+      {
+        bbInit();
+      }
+
+      /*------------------------------------------------
+      Transition into raw BitBang SPI mode. Success is indicated by the 
+      Bus Pirate returning "SPIx" where x is the current SPI version number.
+      ------------------------------------------------*/
+      if (currentMode == OperationalModes::BP_MODE_BIT_BANG_ROOT)
+      {
+        std::vector<uint8_t> cmd = { BitBangCommands::enterSPI };
+        auto response = sendResponsiveCommand(cmd, boost::regex{"(SPI)."});
+
+        std::string strOut( response.begin(), response.end() );
+        std::string substr = "SPI";
+
+        if (strOut.find(substr) != std::string::npos )
+        {
+          modeEntered = true;
+        }
+      }
+      
+      return modeEntered;
     }
 
     bool Device::bbI2C()

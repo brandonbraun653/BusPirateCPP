@@ -59,8 +59,64 @@ namespace HWInterface
 
       Chimera::Status_t getClockFrequency( uint32_t *const freq ) noexcept override;
 
+      /**
+       *	Enables or disables the on-board power supplies
+       *	
+       *	@param[in]	state         Enabled (true), disabled (false)
+       *	@return Chimera::Status_t
+       */
+       Chimera::Status_t cfgPowerSupplies(const bool state);
+
+      /**
+       *	Enables or disables pullups on all pins
+       *	
+       *	@param[in]	state         Enabled (true), disabled (false)
+       *	@return Chimera::Status_t
+       */
+       Chimera::Status_t cfgPullups(const bool state);
+
+      /**
+       *	Enables or disables the Auxiliary pin
+       *	
+       *	@param[in]	state         Enabled (true), disabled (false)
+       *	@return Chimera::Status_t
+       */
+       Chimera::Status_t cfgAuxPin(const bool state);
+
+      /**
+       *	Enables or disables the chip select pin. This behavior will follow
+       *  whatever the current HiZ configuration is for the device.
+       *	
+       *	@param[in]	state         Enabled (true), disabled (false)
+       *	@return Chimera::Status_t
+       */
+       Chimera::Status_t cfgChipSelect(const bool state);
+
+      /**
+       *	Enables or disables the SPI output pins 
+       *	
+       *	@param[in]	state     True (3.3V), false (HiZ)
+       *	@return Chimera::Status_t
+       */
+       Chimera::Status_t cfgSPIPinOut(const bool state);
+
+      /**
+       *	Set the idle state of the clock signal, high or low
+       *	
+       *	@param[in]	state     Logical idle state of the clock
+       *	@return Chimera::Status_t
+       */
+       Chimera::Status_t cfgSPIClkIdle(const bool state);
+
+      /**
+       *	Set which edge the clock should be valid on.
+       *	
+       *	@param[in]	direction     Idle to Active (false), Active to Idle (true)
+       *	@return Chimera::Status_t
+       */
+       Chimera::Status_t cfgSPIClkEdge(const bool direction);
+
     protected:
-      bool enterBinaryMode();
 
     private:
       Device &busPirate;

@@ -159,8 +159,6 @@ namespace HWInterface
 
   Chimera::Status_t SerialDriver::read( uint8_t *const buffer, const size_t length, const uint32_t timeout_mS ) noexcept
   {
-
-
     /*------------------------------------------------
     The io_service must be reset before calling run_one()
     <https://stackoverflow.com/questions/35643311/why-must-io-servicereset-be-called>

@@ -59,6 +59,9 @@ namespace HWInterface
       static constexpr uint8_t init  = 0x00; /**< Command that when repeated, enters bit-bang mode */
       static constexpr uint8_t success = 0x01; /**< Indicates that a command succeeded */
       static constexpr uint8_t reset = 0x0F; /**< Resets the Bus Pirate and returns to the user terminal */
+
+      static constexpr uint8_t enterSPI = 0x01; /**< When in Bit Bang mode, this will cause the Bus Pirate to enter SPI bit bang mode */
+
     };
 
     // class OperationalModes
@@ -120,12 +123,14 @@ namespace HWInterface
       BP_MODE_UART,
       BP_MODE_I2C,
       BP_MODE_SPI,
-      BP_MODE_SPI_BIT_BANG,
       BP_MODE_JTAG,
       BP_MODE_RAW2WIRE,
       BP_MODE_RAW3WIRE,
       BP_MODE_PC_KEYBOARD,
       BP_MODE_LCD,
+
+      BP_MODE_BIT_BANG_ROOT,
+      BP_MODE_SPI_BIT_BANG,
 
       BP_INVALID_MODE,
       BP_NUM_MODES
@@ -316,6 +321,8 @@ namespace HWInterface
        */
       std::vector<uint8_t> sendResponsiveCommand( const std::vector<uint8_t> &cmd, const boost::regex &delimiter = boost::regex{} ) noexcept;
 
+      std::vector<uint8_t> sendResponsiveCommand( const std::vector<uint8_t> &cmd, const uint32_t length);
+
       /**
        *	Enters bit bang mode
        *
@@ -324,11 +331,12 @@ namespace HWInterface
       bool bbInit();
 
       /**
-       *  Enters raw SPI mode
+       *  Enters raw SPI mode.
+       *  Must have called bbInit() first or else this will fail.
        *
        *	@return bool: true if success, false if not
        */
-      bool bbSPI();
+      bool bbEnterSPI();
 
       /**
        *
@@ -402,6 +410,7 @@ namespace HWInterface
       bool connectedToSerial; /**< True if the device is connected and configured over serial, false if not */
 
       std::vector<ModeBase_sPtr> supportedModes;
+      OperationalModes currentMode;
 
     private:
     };

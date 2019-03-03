@@ -10,6 +10,8 @@
 
 #include "bp_spi.hpp"
 
+using namespace Chimera;
+using namespace Chimera::GPIO;
 using namespace Chimera::SPI;
 
 namespace HWInterface
@@ -81,71 +83,147 @@ namespace HWInterface
 
     Chimera::Status_t BinarySPI::init( const Chimera::SPI::Setup &setupStruct ) noexcept
     {
-      
+      Chimera::Status_t result = SPI::Status::NOT_INITIALIZED;
 
-      /*------------------------------------------------
-      We don't have control over the physical GPIO pins, so the only parts that
-      matter with the setupStruct is the peripheral configuration settings.
-      ------------------------------------------------*/
+      if (busPirate.bbInit())
+      {
+        result |= cfgSPIPinOut( true );
+        result |= cfgPullups(true);
+        result |= cfgChipSelect(true);
+        result |= setChipSelect( State::HI );
+        result |= cfgPowerSupplies(false);
 
-      return Status::OK;
+        switch (setupStruct.clockMode)
+        {
+          case ClockMode::MODE0:
+            result |= cfgSPIClkIdle( false );
+            result |= cfgSPIClkEdge( true );
+            break;
+
+          case ClockMode::MODE1:
+            result |= cfgSPIClkIdle( false );
+            result |= cfgSPIClkEdge( false );
+            break;
+
+          case ClockMode::MODE2:
+            result |= cfgSPIClkIdle( true );
+            result |= cfgSPIClkEdge( true );
+            break;
+
+          case ClockMode::MODE3:
+            result |= cfgSPIClkIdle( true );
+            result |= cfgSPIClkEdge( false );
+            break;
+
+          default:
+            break;
+        }
+
+        result |= setClockFrequency(setupStruct.clockFrequency);
+      }
+
+      return result;
     }
 
     Chimera::Status_t BinarySPI::setChipSelect( const Chimera::GPIO::State &value ) noexcept
     {
-      return Status::NOT_SUPPORTED;
+      Chimera::Status_t result = SPI::Status::FAILED_CHIP_SELECT_WRITE;
+
+      uint8_t command = 0;
+      if (static_cast<bool>(value))
+      {
+        command = CMD_SET_CS_HIGH;
+      }
+      else
+      {
+        command = CMD_SET_CS_LOW;
+      }
+
+      std::vector<uint8_t> cmd = { command };
+      auto rx = busPirate.sendResponsiveCommand(cmd);
+
+      // TODO: This might be a bug. I think it only returns one byte
+      if (std::find(rx.begin(), rx.end(), BitBangCommands::success) != rx.end())
+      {
+        result = SPI::Status::OK;
+      }
+
+      return result;
     }
 
     Chimera::Status_t BinarySPI::setChipSelectControlMode( const Chimera::SPI::ChipSelectMode &mode ) noexcept
     {
-      return Status::NOT_SUPPORTED;
+      return SPI::Status::NOT_SUPPORTED;
     }
 
     Chimera::Status_t BinarySPI::writeBytes( const uint8_t *const txBuffer, size_t length, const bool &disableCS /*= true*/,
                                          const bool &autoRelease /*= false*/, uint32_t timeoutMS /*= 10*/ ) noexcept
     {
-      return Status::NOT_SUPPORTED;
+      return SPI::Status::NOT_SUPPORTED;
     }
 
     Chimera::Status_t BinarySPI::readBytes( uint8_t *const rxBuffer, size_t length, const bool &disableCS /*= true*/,
                                         const bool &autoRelease /*= false*/, uint32_t timeoutMS /*= 10*/ ) noexcept
     {
-      return Status::NOT_SUPPORTED;
+      return SPI::Status::NOT_SUPPORTED;
     }
 
     Chimera::Status_t BinarySPI::readWriteBytes( const uint8_t *const txBuffer, uint8_t *const rxBuffer, size_t length,
                                              const bool &disableCS /*= true*/, const bool &autoRelease /*= false*/,
                                              uint32_t timeoutMS /*= 10*/ ) noexcept
     {
-      return Status::NOT_SUPPORTED;
+      return SPI::Status::NOT_SUPPORTED;
     }
 
     Chimera::Status_t BinarySPI::setPeripheralMode( const Chimera::SPI::SubPeripheral &periph,
                                                 const Chimera::SPI::SubPeripheralMode &mode ) noexcept
     {
-      return Status::NOT_SUPPORTED;
+      return SPI::Status::NOT_SUPPORTED;
     }
 
     Chimera::Status_t BinarySPI::setClockFrequency( const uint32_t &freq ) noexcept
     {
-      return Status::NOT_SUPPORTED;
+      return SPI::Status::NOT_SUPPORTED;
     }
 
     Chimera::Status_t BinarySPI::getClockFrequency( uint32_t *const freq ) noexcept
     {
-      return Status::NOT_SUPPORTED;
+      return SPI::Status::NOT_SUPPORTED;
     }
 
-    bool BinarySPI::enterBinaryMode()
+    Chimera::Status_t BinarySPI::cfgPowerSupplies( const bool state )
     {
-      bool error = false;
+      return SPI::Status::NOT_SUPPORTED;
+    }
 
-      if (busPirate.isConnected())
-      {
-        
-      }
+    Chimera::Status_t BinarySPI::cfgPullups( const bool state )
+    {
+      return SPI::Status::NOT_SUPPORTED;
+    }
 
-      return error;
+    Chimera::Status_t BinarySPI::cfgAuxPin( const bool state )
+    {
+      return SPI::Status::NOT_SUPPORTED;
+    }
+
+    Chimera::Status_t BinarySPI::cfgChipSelect( const bool state )
+    {
+      return SPI::Status::NOT_SUPPORTED;
+    }
+
+    Chimera::Status_t BinarySPI::cfgSPIPinOut( const bool state )
+    {
+      return SPI::Status::NOT_SUPPORTED;
+    }
+
+    Chimera::Status_t BinarySPI::cfgSPIClkIdle( const bool state )
+    {
+      return SPI::Status::NOT_SUPPORTED;
+    }
+
+    Chimera::Status_t BinarySPI::cfgSPIClkEdge( const bool direction )
+    {
+      return SPI::Status::NOT_SUPPORTED;
     }
 
   }  // namespace BusPirate
