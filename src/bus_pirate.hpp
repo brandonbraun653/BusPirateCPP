@@ -47,28 +47,35 @@ namespace HWInterface
     class MenuCommands
     {
     public:
-      static constexpr auto info    = "i\n"; /**< Hardware, firmware, and microcontroller version information */
-      static constexpr auto reset   = "#\n"; /**< Resets the board (firmware V2.0+) */
-      static constexpr auto busMode = "m\n"; /**< Sets the bus mode (1-Wire, SPI, I2C, JTAG, UART, etc). */
-      static constexpr auto ping    = "\n";  /**< Simulates the user mashing the 'enter' key */
+      static const std::string info;    /**< Hardware, firmware, and microcontroller version information */
+      static const std::string reset;   /**< Resets the board (firmware V2.0+) */
+      static const std::string busMode; /**< Sets the bus mode (1-Wire, SPI, I2C, JTAG, UART, etc). */
+      static const std::string ping;    /**< Simulates the user mashing the 'enter' key */
     };
 
     class BitBangCommands
     {
     public:
-      static constexpr uint8_t init  = 0x00; /**< Command that when repeated, enters bit-bang mode */
+      static constexpr uint8_t init    = 0x00; /**< Command that when repeated, enters bit-bang mode */
+      static constexpr uint8_t unknown = 0x00; /**< Response when command is ineffective or invalid */
       static constexpr uint8_t success = 0x01; /**< Indicates that a command succeeded */
-      static constexpr uint8_t reset = 0x0F; /**< Resets the Bus Pirate and returns to the user terminal */
+      static constexpr uint8_t reset   = 0x0F; /**< Resets the Bus Pirate and returns to the user terminal */
 
-      static constexpr uint8_t enterSPI = 0x01; /**< When in Bit Bang mode, this will cause the Bus Pirate to enter SPI bit bang mode */
+      static constexpr uint8_t enterSPI = 0x01; /**< Enter SPI bit bang mode */
 
+      static const std::string initSuccess; /**< Character sequence that indicates transition to Bit Bang root mode */
     };
 
-    // class OperationalModes
-    //{
-    // public:
-    //
-    //};
+    class ModeTracker
+    {
+    public:
+      void update();
+
+      void getModeRegex();
+
+    protected:
+    private:
+    };
 
     struct Info
     {
@@ -238,7 +245,7 @@ namespace HWInterface
       void close();
 
       /**
-       *	Resets the Bus Pirate according to command '#'
+       *	Resets the Bus Pirate back to terminal mode and clears all settings.
        *	Only firmware versions v2.0+ can do this.
        *
        *	@return True if success, false if not
@@ -283,7 +290,7 @@ namespace HWInterface
        *
        *	@return HWInterface::BusPirate::InteractionMode
        */
-       InteractionMode getInteractionMode();
+      InteractionMode getInteractionMode();
 
       /**
        *	Sends a command to the device
@@ -319,9 +326,10 @@ namespace HWInterface
        *	@param[in]	cmd         Command to be sent that ends with '\n'.
        *	@return std::vector<uint8_t>
        */
-      std::vector<uint8_t> sendResponsiveCommand( const std::vector<uint8_t> &cmd, const boost::regex &delimiter = boost::regex{} ) noexcept;
+      std::vector<uint8_t> sendResponsiveCommand( const std::vector<uint8_t> &cmd,
+                                                  const boost::regex &delimiter = boost::regex{} ) noexcept;
 
-      std::vector<uint8_t> sendResponsiveCommand( const std::vector<uint8_t> &cmd, const uint32_t length);
+      std::vector<uint8_t> sendResponsiveCommand( const std::vector<uint8_t> &cmd, const uint32_t length );
 
       /**
        *	Enters bit bang mode
@@ -411,6 +419,31 @@ namespace HWInterface
 
       std::vector<ModeBase_sPtr> supportedModes;
       OperationalModes currentMode;
+
+
+      /**
+       *  Resets the device under the assumption we are in terminal mode.
+       *  The device will be in terminal mode after success.
+       *
+       *	@return bool: true if success, false if not
+       */
+       bool resetTerminal();
+
+      /**
+       *	Resets the device under the assumption we are in Bit Bang root.
+       *  The device will be in terminal mode after success.
+       *
+       *	@return bool: true if success, false if not
+       */
+       bool resetBitBangRoot();
+
+      /**
+       *	Resets the device under the assumption we are in some Bit Bang HW mode.
+       *  The device will be in terminal mode after success.
+       *
+       *	@return bool: true if success, false if not
+       */
+       bool resetBitBangHWMode();
 
     private:
     };

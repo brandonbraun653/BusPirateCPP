@@ -47,6 +47,16 @@ namespace HWInterface
     static constexpr uint32_t minResetFirmwareMajorVer = 2; /**< Minimum firmware version needed to support reset '#' command */
 
     /*------------------------------------------------
+    Various class static variable initializers
+    ------------------------------------------------*/
+    const std::string MenuCommands::info    = "i\n";
+    const std::string MenuCommands::reset   = "#\n";
+    const std::string MenuCommands::busMode = "m\n";
+    const std::string MenuCommands::ping    = "\n";
+
+    const std::string BitBangCommands::initSuccess = "BBIO";
+
+    /*------------------------------------------------
     The current supported Bus Pirate operational modes
     ------------------------------------------------*/
     // std::array<ModeTypeBase, 2> supportedModes = { HiZMode(), SPIMode() };
@@ -112,51 +122,26 @@ namespace HWInterface
 
     bool Device::reset()
     {
-      bool result = false;
+      bool devReset = resetTerminal();
 
-      /*------------------------------------------------
-      Send the Bit Bang reset command first. There is a weird quirk with the hardware where
-      sending the Terminal reset first will cause a lock-up if you are in Bit Bang mode. Should
-      this fail to reset the board, we are likely already in terminal mode.
-      ------------------------------------------------*/
-      serial->flush();
-      std::vector<uint8_t> bbCmd = { BitBangCommands::reset };
-      std::vector<uint8_t> bbOut = sendResponsiveCommand( bbCmd, 1 );
-
-      if ( std::find( bbOut.begin(), bbOut.end(), BitBangCommands::success ) != bbOut.end() )
+      if( !devReset )
       {
-        result = true;
-      }
-      else
-      {
-        /*------------------------------------------------
-        Allow some breathing room for the hardware
-        ------------------------------------------------*/
-        Chimera::delayMilliseconds( 10 );
+        devReset = resetBitBangRoot();
 
-        /*------------------------------------------------
-        Send the reset command
-        ------------------------------------------------*/
-        std::string cmd = MenuCommands::reset;
-        std::string out = sendResponsiveCommand( cmd, boost::regex{ "(\r\n)" } );
-
-        /*------------------------------------------------
-        According to the docs, RESET should be printed if the command was received/executed
-        successfully from terminal mode. Otherwise, any data at on the serial port indicates
-        reset from Bit Bang mode.
-        ------------------------------------------------*/
-        if ( out.find( "RESET" ) != std::string::npos )
+        if(!devReset)
         {
-          result = true;
+          devReset = resetBitBangHWMode();
         }
+
       }
 
       /*------------------------------------------------
-      Leave the next call in a clean state
+      The above commands don't read out all the serial data, so make sure other
+      functions don't accidentally get interpret it as part of their response.
       ------------------------------------------------*/
       serial->flush();
 
-      return result;
+      return devReset;
     }
 
     bool Device::connect()
@@ -193,10 +178,13 @@ namespace HWInterface
 
     void Device::clearTerminal()
     {
-      const std::string enter = MenuCommands::ping;
+      auto dataField = reinterpret_cast<const uint8_t *>( MenuCommands::ping.data() );
+      auto dataSize  = MenuCommands::ping.size();
+
       for ( auto x = 0; x < 3; x++ )
       {
-        sendCommand( enter );
+        serial->write( dataField, dataSize );
+        Chimera::delayMilliseconds(100);
       }
     }
 
@@ -511,7 +499,7 @@ namespace HWInterface
       }
 
       /*------------------------------------------------
-      Transition into raw BitBang SPI mode. Success is indicated by the 
+      Transition into raw BitBang SPI mode. Success is indicated by the
       Bus Pirate returning "SPIx" where x is the current SPI version number.
       ------------------------------------------------*/
       if (currentMode == OperationalModes::BP_MODE_BIT_BANG_ROOT)
@@ -527,7 +515,7 @@ namespace HWInterface
           modeEntered = true;
         }
       }
-      
+
       return modeEntered;
     }
 
@@ -569,6 +557,68 @@ namespace HWInterface
     bool Device::bbExit()
     {
       return false;
+    }
+
+    bool Device::resetTerminal()
+    {
+      bool devReset = false;
+      std::vector<uint8_t> termCmd;
+      std::vector<uint8_t> termOut;
+      std::string termStr;
+
+      clearTerminal();
+      serial->flush();
+
+      //TODO: It might be worth swapping the regex based on the current mode
+      //auto out = sendResponsiveCommand( MenuCommands::reset, boost::regex{ "(\r\n)" } );
+      termCmd = std::vector<uint8_t>( MenuCommands::reset.begin(), MenuCommands::reset.end());
+      termOut = sendResponsiveCommand(termCmd, 10);
+      termStr = std::string(termOut.begin(), termOut.end());
+
+      if ( termStr.find( "RESET" ) != std::string::npos )
+      {
+        devReset = true;
+      }
+
+      return devReset;
+    }
+
+    bool Device::resetBitBangRoot()
+    {
+      bool devReset = false;
+      std::vector<uint8_t> bbCmd;
+      std::vector<uint8_t> bbOut;
+
+      serial->flush();
+      bbCmd = { BitBangCommands::reset };
+      bbOut = sendResponsiveCommand( bbCmd, sizeof( BitBangCommands::reset ) );
+
+      if ( !devReset && bbOut.size() && ( bbOut[ 0 ] == BitBangCommands::success ) )
+      {
+        devReset = true;
+      }
+
+      return devReset;
+    }
+
+    bool Device::resetBitBangHWMode()
+    {
+      bool devReset = false;
+      std::vector<uint8_t> bbCmd;
+      std::vector<uint8_t> bbOut;
+      std::string bbStr;
+
+      serial->flush();
+      bbCmd = { BitBangCommands::init };
+      bbOut = sendResponsiveCommand( bbCmd, static_cast<uint32_t>( BitBangCommands::initSuccess.size() ) );
+      bbStr = std::string( bbOut.begin(), bbOut.end() );
+
+      if ( bbStr.find( BitBangCommands::initSuccess ) != std::string::npos )
+      {
+        devReset = resetBitBangRoot();
+      }
+
+      return devReset;
     }
 
     std::string HiZMode::modeString() noexcept

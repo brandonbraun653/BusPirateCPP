@@ -18,7 +18,7 @@ namespace HWInterface
 {
   namespace BusPirate
   {
-    
+
 
     static constexpr uint8_t CMD_ENTER_RAW_SPI   = 0x01;
     static constexpr uint8_t CMD_SET_CS_LOW      = 0x02;
@@ -71,14 +71,10 @@ namespace HWInterface
     static constexpr uint8_t CFG_SPI_CPHA_ACT_TO_IDLE = ( 1u << 1 );
     static constexpr uint8_t CFG_SPI_CPHA_IDLE_TO_ACT = ~CFG_SPI_CPHA_ACT_TO_IDLE;
 
-    static constexpr uint8_t CFG_SPI_SMP_MID = ~(1u << 0);
-
-
-
 
     BinarySPI::BinarySPI( Device &device ) : busPirate( device )
     {
-      
+
     }
 
     Chimera::Status_t BinarySPI::init( const Chimera::SPI::Setup &setupStruct ) noexcept

@@ -159,55 +159,68 @@ namespace HWInterface
 
   Chimera::Status_t SerialDriver::read( uint8_t *const buffer, const size_t length, const uint32_t timeout_mS ) noexcept
   {
-    /*------------------------------------------------
-    The io_service must be reset before calling run_one()
-    <https://stackoverflow.com/questions/35643311/why-must-io-servicereset-be-called>
-    ------------------------------------------------*/
-    io.reset();
-
-    /*------------------------------------------------
-    Start the asynchronous read
-    ------------------------------------------------*/
-    boost::asio::async_read( serialPort, boost::asio::buffer( buffer, length ),
-                             boost::bind( &SerialDriver::callback_readComplete, this, boost::asio::placeholders::error,
-                                          boost::asio::placeholders::bytes_transferred ) );
-
-    /*------------------------------------------------
-    Initialize the timeout service
-    ------------------------------------------------*/
-    timer.expires_from_now( boost::posix_time::milliseconds( timeout_mS ) );
-    timer.async_wait( boost::bind( &SerialDriver::callback_timeoutExpired, this, boost::asio::placeholders::error ) );
-
-    /*------------------------------------------------
-    Periodically grab updates from the io_service. Updates
-    are propagated through the class callback_*() functions.
-    ------------------------------------------------*/
-    asyncResult      = Status::RX_IN_PROGRESS;
-    bytesTransferred = 0;
-
-    while ( asyncResult == Status::RX_IN_PROGRESS )
+    if ( serialPort.is_open() )
     {
-      io.run_one();
+      /*------------------------------------------------
+      The io_service must be reset before reuse
+      https://stackoverflow.com/questions/35643311/why-must-io-servicereset-be-called
+      ------------------------------------------------*/
+      io.restart();
 
-      switch ( asyncResult )
+      /*------------------------------------------------
+      Start the asynchronous read
+      ------------------------------------------------*/
+      boost::asio::async_read( serialPort, boost::asio::buffer( buffer, length ),
+                               boost::bind( &SerialDriver::callback_readComplete, this, boost::asio::placeholders::error,
+                                            boost::asio::placeholders::bytes_transferred ) );
+
+      /*------------------------------------------------
+      Initialize the timeout service
+      ------------------------------------------------*/
+      timer.expires_from_now( boost::posix_time::milliseconds( timeout_mS ) );
+      timer.async_wait( boost::bind( &SerialDriver::callback_timeoutExpired, this, boost::asio::placeholders::error ) );
+
+      /*------------------------------------------------
+      Periodically grab updates from the io_service. Updates
+      are propagated through the class callback_*() functions.
+      ------------------------------------------------*/
+      asyncResult      = Status::RX_IN_PROGRESS;
+      bytesTransferred = 0;
+
+      while ( asyncResult == Status::RX_IN_PROGRESS )
       {
-        case Status::RX_COMPLETE:
-          timer.cancel();
-          break;
+        io.run_one();
 
-        case Status::UNKNOWN_ERROR:
-          timer.cancel();
-          serialPort.cancel();
-          break;
+        switch ( asyncResult )
+        {
+          case Status::RX_COMPLETE:
+            timer.cancel();
+            break;
 
-        case Status::TIMEOUT:
-          serialPort.cancel();
-          break;
+          case Status::TIMEOUT:
+            serialPort.cancel();
+            break;
 
-        case Status::RX_IN_PROGRESS:
-        default:
-          break;
+          case Status::UNKNOWN_ERROR:
+            timer.cancel();
+            serialPort.cancel();
+            break;
+
+          case Status::RX_IN_PROGRESS:
+          default:
+            break;
+        }
       }
+
+      /*------------------------------------------------
+      Upon exiting the above code, the io_service will still report outstanding work and
+      error out further operations. Allow the io_service to tidy itself up.
+      ------------------------------------------------*/
+      io.run();
+    }
+    else
+    {
+      asyncResult = Status::FAILED_READ;
     }
 
     return asyncResult;
@@ -219,10 +232,10 @@ namespace HWInterface
     if( serialPort.is_open() )
     {
       /*------------------------------------------------
-      The io_service must be reset before calling run_one()
-      <https://stackoverflow.com/questions/35643311/why-must-io-servicereset-be-called>
+      The io_service must be reset before ruse
+      https://stackoverflow.com/questions/35643311/why-must-io-servicereset-be-called
       ------------------------------------------------*/
-      io.reset();
+      io.restart();
 
       /*------------------------------------------------
       Start the asynchronous read
@@ -252,17 +265,18 @@ namespace HWInterface
         {
           case Status::RX_COMPLETE:
             timer.cancel();
+
             buffer.resize( inputStream.size(), 0 );
             boost::asio::buffer_copy( boost::asio::buffer( buffer ), inputStream.data() );
             inputStream.consume(inputStream.size());
             break;
 
-          case Status::UNKNOWN_ERROR:
-            timer.cancel();
+          case Status::TIMEOUT:
             serialPort.cancel();
             break;
 
-          case Status::TIMEOUT:
+          case Status::UNKNOWN_ERROR:
+            timer.cancel();
             serialPort.cancel();
             break;
 
@@ -273,16 +287,15 @@ namespace HWInterface
       }
 
       /*------------------------------------------------
-      Reset the asio async functionality
+      Upon exiting the above code, the io_service will still report outstanding work and
+      error out further operations. Allow the io_service to tidy itself up.
       ------------------------------------------------*/
-      timer.cancel();
-      serialPort.cancel();
+      io.run();
     }
     else
     {
       asyncResult = Status::FAILED_READ;
     }
-
 
     return asyncResult;
   }
@@ -298,8 +311,6 @@ namespace HWInterface
     Clears the input stream effectively erasing the object's cache of old data
     ------------------------------------------------*/
     inputStream.consume(inputStream.size());
-
-    serialPort.cancel();
 
     /*------------------------------------------------
     Platform specific serial port driver buffer clearing
@@ -348,12 +359,6 @@ namespace HWInterface
     {
       asyncResult            = Status::RX_COMPLETE;
       this->bytesTransferred = bytesTransferred;
-      return;
-    }
-    else
-    {
-      std::string err = error.message();
-      std::cout << err << std::endl;
     }
   }
 
