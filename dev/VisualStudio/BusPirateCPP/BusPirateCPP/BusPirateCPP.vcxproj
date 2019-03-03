@@ -108,7 +108,7 @@
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions);_WIN32_WINNT=0x0501</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>D:\git\GitHub\BusPirateCPP\lib;$(BOOST_ROOT)/boost_1_68_0;D:\git\GitHub\BusPirateCPP\src;D:\git\GitHub\BusPirateCPP\lib\Chimera;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>D:\git\GitHub\BusPirateCPP\lib\spdlog\include;D:\git\GitHub\BusPirateCPP\lib;$(BOOST_ROOT)/boost_1_68_0;D:\git\GitHub\BusPirateCPP\src;D:\git\GitHub\BusPirateCPP\lib\Chimera;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp14</LanguageStandard>
       <ShowIncludes>false</ShowIncludes>
     </ClCompile>

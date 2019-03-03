@@ -13,6 +13,7 @@
 
 /* Library Includes */
 #include <strtk/strtk.hpp>
+#include <spdlog/spdlog.h>
 
 /* Chimera Includes */
 #include <Chimera/serial.hpp>
@@ -70,7 +71,7 @@ namespace HWInterface
       supportedModes.push_back( std::make_unique<SPIMode>() );
 
       connectedToSerial = false;
-      currentMode = OperationalModes::BP_INVALID_MODE;
+      currentMode       = OperationalModes::BP_INVALID_MODE;
     }
 
     bool Device::open()
@@ -94,8 +95,12 @@ namespace HWInterface
         ------------------------------------------------*/
         if ( connectedToSerial && reset() )
         {
-          opened = true;
+          opened      = true;
           currentMode = OperationalModes::BP_MODE_HiZ;
+        }
+        else
+        {
+          spdlog::error( "Failed opening Bus Pirate device" );
         }
       }
       else
@@ -124,15 +129,14 @@ namespace HWInterface
     {
       bool devReset = resetTerminal();
 
-      if( !devReset )
+      if ( !devReset )
       {
         devReset = resetBitBangRoot();
 
-        if(!devReset)
+        if ( !devReset )
         {
           devReset = resetBitBangHWMode();
         }
-
       }
 
       /*------------------------------------------------
@@ -184,7 +188,7 @@ namespace HWInterface
       for ( auto x = 0; x < 3; x++ )
       {
         serial->write( dataField, dataSize );
-        Chimera::delayMilliseconds(100);
+        Chimera::delayMilliseconds( 100 );
       }
     }
 
@@ -360,11 +364,13 @@ namespace HWInterface
     void Device::sendCommand( const std::string &cmd ) noexcept
     {
       sendResponsiveCommand( cmd );
+      serial->flush();
     }
 
     void Device::sendCommand( const std::vector<uint8_t> &cmd ) noexcept
     {
-      sendResponsiveCommand( cmd );
+      sendResponsiveCommand( cmd, static_cast<uint32_t>( cmd.size() ) );
+      serial->flush();
     }
 
     std::string Device::sendResponsiveCommand( const std::string &cmd, const boost::regex &delimiter ) noexcept
@@ -412,7 +418,7 @@ namespace HWInterface
       }
       else
       {
-        std::cout << "Could not send command. There was a problem with the serial port." << std::endl;
+        spdlog::error( "Could not send command. There was a problem with the serial port." );
       }
 
       return response;
@@ -438,28 +444,27 @@ namespace HWInterface
       }
       else
       {
-        std::cout << "Could not send command. There was a problem with the serial port." << std::endl;
+        spdlog::error("Could not send command. There was a problem with the serial port.");
       }
 
       return readBuffer;
     }
 
-    std::vector<boost::uint8_t> Device::sendResponsiveCommand( const std::vector<uint8_t> &cmd, const uint32_t length )
+    std::vector<boost::uint8_t> Device::sendResponsiveCommand( const std::vector<uint8_t> &cmd, const uint32_t length ) noexcept
     {
-      std::vector<uint8_t> readBuffer(length);
+      std::vector<uint8_t> readBuffer( length );
 
       if ( isConnected() )
       {
         serial->write( cmd.data(), cmd.size() );
-        serial->read(readBuffer.data(), length);
+        serial->read( readBuffer.data(), length );
       }
       else
       {
-        std::cout << "Could not send command. There was a problem with the serial port." << std::endl;
+        spdlog::error( "Could not send command. There was a problem with the serial port." );
       }
 
       return readBuffer;
-
     }
 
     bool Device::bbInit()
@@ -478,7 +483,7 @@ namespace HWInterface
 
         if ( actualResponse.find( expectedResponse ) != std::string::npos )
         {
-          result = true;
+          result      = true;
           currentMode = OperationalModes::BP_MODE_BIT_BANG_ROOT;
         }
       }
@@ -493,7 +498,7 @@ namespace HWInterface
       /*------------------------------------------------
       Automatically transition the device to BitBang mode if not there
       ------------------------------------------------*/
-      if (currentMode != OperationalModes::BP_MODE_BIT_BANG_ROOT )
+      if ( currentMode != OperationalModes::BP_MODE_BIT_BANG_ROOT )
       {
         bbInit();
       }
@@ -502,15 +507,15 @@ namespace HWInterface
       Transition into raw BitBang SPI mode. Success is indicated by the
       Bus Pirate returning "SPIx" where x is the current SPI version number.
       ------------------------------------------------*/
-      if (currentMode == OperationalModes::BP_MODE_BIT_BANG_ROOT)
+      if ( currentMode == OperationalModes::BP_MODE_BIT_BANG_ROOT )
       {
         std::vector<uint8_t> cmd = { BitBangCommands::enterSPI };
-        auto response = sendResponsiveCommand(cmd, boost::regex{"(SPI)."});
+        auto response            = sendResponsiveCommand( cmd, boost::regex{ "(SPI)." } );
 
         std::string strOut( response.begin(), response.end() );
         std::string substr = "SPI";
 
-        if (strOut.find(substr) != std::string::npos )
+        if ( strOut.find( substr ) != std::string::npos )
         {
           modeEntered = true;
         }
@@ -569,15 +574,17 @@ namespace HWInterface
       clearTerminal();
       serial->flush();
 
-      //TODO: It might be worth swapping the regex based on the current mode
-      //auto out = sendResponsiveCommand( MenuCommands::reset, boost::regex{ "(\r\n)" } );
-      termCmd = std::vector<uint8_t>( MenuCommands::reset.begin(), MenuCommands::reset.end());
-      termOut = sendResponsiveCommand(termCmd, 10);
-      termStr = std::string(termOut.begin(), termOut.end());
+      termCmd = std::vector<uint8_t>( MenuCommands::reset.begin(), MenuCommands::reset.end() );
+      termOut = sendResponsiveCommand( termCmd, 10 );
+      termStr = std::string( termOut.begin(), termOut.end() );
 
       if ( termStr.find( "RESET" ) != std::string::npos )
       {
         devReset = true;
+      }
+      else 
+      {
+        spdlog::error("Failed terminal reset");
       }
 
       return devReset;
@@ -596,6 +603,10 @@ namespace HWInterface
       if ( !devReset && bbOut.size() && ( bbOut[ 0 ] == BitBangCommands::success ) )
       {
         devReset = true;
+      }
+      else
+      {
+        spdlog::error("Failed Bit Bang root reset");
       }
 
       return devReset;
@@ -616,6 +627,10 @@ namespace HWInterface
       if ( bbStr.find( BitBangCommands::initSuccess ) != std::string::npos )
       {
         devReset = resetBitBangRoot();
+      }
+      else 
+      {
+        spdlog::error("Failed Bit Bang HW Reset");
       }
 
       return devReset;

@@ -2,6 +2,7 @@
 #include <iostream>
 #include "bus_pirate.hpp"
 #include "serial_driver.hpp"
+#include "bp_spi.hpp"
 
 using namespace Chimera::Serial;
 
@@ -12,15 +13,23 @@ using namespace std;
 
 int main()
 {
-  std::string device = "COM7";
+  std::string device = "COM6";
   HWInterface::BusPirate::Device bp( device );
+  HWInterface::BusPirate::BinarySPI spi( bp );
 
-  if( bp.open())
+  Chimera::SPI::Setup setup;
+  setup.bitOrder = Chimera::SPI::BitOrder::MSB_FIRST;
+  setup.mode = Chimera::SPI::Mode::MASTER;
+  setup.clockMode = Chimera::SPI::ClockMode::MODE0;
+  setup.clockFrequency = 1000000;
+  setup.dataSize = Chimera::SPI::DataSize::SZ_8BIT;
+
+  if (spi.init(setup) == Status::OK )
   {
-    bp.bbInit();
-    bp.bbEnterSPI();
-    bp.close();
+    
   }
+
+  spi.deInit();
 
   return 0;
 }

@@ -321,15 +321,25 @@ namespace HWInterface
 
       /**
        *	Send a series of bytes to the Bus Pirate, returning the response to the user.
-       *  Most typically this is used for bit-bang or a raw interface mode
+       *  Most typically this is used for terminal mode that uses a regex to figure out 
+       *  when the transfer has ended.
        *
        *	@param[in]	cmd         Command to be sent that ends with '\n'.
+       *  @param[in]  delimiter   Regex used to decide when reading the response is finished
        *	@return std::vector<uint8_t>
        */
       std::vector<uint8_t> sendResponsiveCommand( const std::vector<uint8_t> &cmd,
                                                   const boost::regex &delimiter = boost::regex{} ) noexcept;
 
-      std::vector<uint8_t> sendResponsiveCommand( const std::vector<uint8_t> &cmd, const uint32_t length );
+      /**
+       *	Send a series of bytes to the Bus Pirate, returning the response to the user.
+       *  This version is used primarily in Bit Bang mode where the response length is known.
+       *	
+       *	@param[in]	cmd         Command to be sent (does not need to end in '\n')
+       *	@param[in]	length      How many bytes to read before returning
+       *	@return std::vector<boost::uint8_t>
+       */
+       std::vector<uint8_t> sendResponsiveCommand( const std::vector<uint8_t> &cmd, const uint32_t length ) noexcept;
 
       /**
        *	Enters bit bang mode

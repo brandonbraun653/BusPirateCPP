@@ -24,6 +24,22 @@ namespace HWInterface
 {
   namespace BusPirate
   {
+    /**
+     *  Supported Bus Pirate SPI Speeds 
+     */
+    enum SpiSpeed
+    {
+      SPEED_30kHz         = 30000,
+      SPEED_125kHz        = 125000,
+      SPEED_250kHz        = 250000,
+      SPEED_1MHz          = 1000000,
+      SPEED_2MHz          = 2000000,
+      SPEED_2_6MHz        = 2600000,
+      SPEED_4MHz          = 4000000,
+      SPEED_8MHz          = 8000000,
+      SPEED_NOT_SUPPORTED = 9999999,
+    };
+
     class BinarySPI : public Chimera::SPI::Interface
     {
     public:
@@ -37,6 +53,8 @@ namespace HWInterface
       ~BinarySPI() = default;
       
       Chimera::Status_t init( const Chimera::SPI::Setup &setupStruct ) noexcept override;
+      
+      Chimera::Status_t deInit() noexcept override;
 
       Chimera::Status_t setChipSelect( const Chimera::GPIO::State &value ) noexcept override;
 
@@ -116,10 +134,24 @@ namespace HWInterface
        */
        Chimera::Status_t cfgSPIClkEdge(const bool direction);
 
+      Chimera::Status_t reserve( const uint32_t &timeout_ms = 0u ) override;
+
+      Chimera::Status_t release( const uint32_t &timeout_ms = 0u ) override;
+
+
+
+
     protected:
 
     private:
       Device &busPirate;
+
+      bool systemInitialized;
+
+      uint8_t reg_PeriphCfg;
+      uint8_t reg_SPICfg;
+      uint8_t reg_CS;
+      uint8_t reg_SPISpeed;
     };
   
   }
