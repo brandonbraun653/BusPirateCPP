@@ -32,10 +32,6 @@ namespace HWInterface
   namespace BusPirate
   {
     static constexpr uint8_t CMD_ENTER_RAW_SPI   = 0x01;
-    static constexpr uint8_t CMD_WRITE_THEN_READ = 0x04;
-
-    static constexpr uint8_t CMD_BULK_SPI_TXFR       = 0x10;
-    static constexpr uint8_t MSK_BULK_SPI_TXFR_BYTES = 0x0F;
 
     /*------------------------------------------------
     Chip Select Options
@@ -84,10 +80,21 @@ namespace HWInterface
         SPEED_125kHz, 0x01 )( SPEED_250kHz, 0x02 )( SPEED_1MHz, 0x03 )( SPEED_2MHz, 0x04 )( SPEED_2_6MHz, 0x05 )(
         SPEED_4MHz, 0x06 )( SPEED_8MHz, 0x07 )( SPEED_NOT_SUPPORTED, 0x00 );
 
+    /*------------------------------------------------
+    SPI Write/Read Commands 
+    ------------------------------------------------*/
+    static constexpr uint8_t CMD_BULK_SPI_TXFR       = 0x10;
+    static constexpr uint8_t MSK_BULK_SPI_TXFR_BYTES = 0x0F;
+    static constexpr uint8_t CMD_TX_THEN_RX_MAN_CS   = 0x05;
+    static constexpr uint8_t CMD_TX_THEN_RX_AUTO_CS  = 0x04;
+
+    
+
     BinarySPI::BinarySPI( Device &device ) : busPirate( device )
     {
       busPirate.open();
       systemInitialized = false;
+      csMode            = Chimera::SPI::ChipSelectMode::MANUAL;
 
       /*------------------------------------------------
       Initialize the virtual registers
@@ -203,13 +210,24 @@ namespace HWInterface
 
     Chimera::Status_t BinarySPI::setChipSelectControlMode( const Chimera::SPI::ChipSelectMode &mode ) noexcept
     {
-      return SPI::Status::NOT_SUPPORTED;
+      csMode = mode;
+      return SPI::Status::OK;
     }
 
     Chimera::Status_t BinarySPI::writeBytes( const uint8_t *const txBuffer, size_t length, const bool &disableCS /*= true*/,
                                              const bool &autoRelease /*= false*/, uint32_t timeoutMS /*= 10*/ ) noexcept
     {
-      return SPI::Status::NOT_SUPPORTED;
+      Chimera::Status_t result = SPI::Status::FAIL;
+      TXRXPacket_t transfer;
+
+      transfer.command = CMD_BULK_SPI_TXFR;
+      transfer.numWriteBytes = length;
+      transfer.numReadBytes = length;
+      transfer.writeData = std::vector<uint8_t>(txBuffer, txBuffer + length );
+
+      result = bulkTransfer(transfer);
+
+      return result;
     }
 
     Chimera::Status_t BinarySPI::readBytes( uint8_t *const rxBuffer, size_t length, const bool &disableCS /*= true*/,
@@ -531,5 +549,65 @@ namespace HWInterface
     {
       return SPI::Status::NOT_SUPPORTED;
     }
+
+    Chimera::Status_t BinarySPI::bulkTransfer( TXRXPacket_t &transfer )
+    {
+      Chimera::Status_t result = SPI::Status::FAIL;
+      std::vector<uint8_t> data;
+      std::vector<uint8_t> output;
+
+      uint8_t command = transfer.command | ( transfer.numWriteBytes & MSK_BULK_SPI_TXFR_BYTES );
+      data = std::vector<uint8_t>{ command };
+      auto out = busPirate.sendResponsiveCommand( data, 1 );
+
+      if ( out.size() && out[ 0 ] == BitBangCommands::success )
+      {
+        for ( auto x = 0; x < transfer.numWriteBytes; x++ )
+        {
+          data[ 0 ] = transfer.writeData[ x ];
+          auto tmp  = busPirate.sendResponsiveCommand( data, data.size() );
+
+          if ( tmp.size() )
+          {
+            output.push_back( tmp[ 0 ] );
+          }
+        }
+
+        if ( output.size() )
+        {
+          transfer.readData = output;
+        }
+      }
+      return result;
+    }
+
+    Chimera::Status_t BinarySPI::writeThenRead( TXRXPacket_t &transfer )
+    { 
+      Chimera::Status_t result = SPI::Status::FAIL;
+      std::vector<uint8_t> data;
+
+      /*------------------------------------------------
+      Send the command preamble
+      ------------------------------------------------*/
+      data = std::vector<uint8_t>{ transfer.command, static_cast<uint8_t>( ( transfer.numWriteBytes >> 8 ) & 0xFF ),
+                                   static_cast<uint8_t>( ( transfer.numWriteBytes & 0xFF ) ),
+                                   static_cast<uint8_t>( ( transfer.numReadBytes >> 8 ) & 0xFF ),
+                                   static_cast<uint8_t>( ( transfer.numReadBytes & 0xFF ) ) };
+      busPirate.sendCommand( data );
+
+      /*------------------------------------------------
+      Send the actual data
+      ------------------------------------------------*/
+      auto out = busPirate.sendResponsiveCommand( transfer.writeData, transfer.numReadBytes + 1 );
+
+      if (out.size() && out[0] == BitBangCommands::success)
+      {
+        /* Remove the success byte from the returned data (0x01) */
+        transfer.readData = std::vector<uint8_t>(out.begin() + 1, out.end());
+      }
+
+      return result;
+    }
+
   }  // namespace BusPirate
 }  // namespace HWInterface

@@ -138,13 +138,11 @@ namespace HWInterface
 
       Chimera::Status_t release( const uint32_t &timeout_ms = 0u ) override;
 
-
-
-
     protected:
 
     private:
       Device &busPirate;
+      Chimera::SPI::ChipSelectMode csMode;
 
       bool systemInitialized;
 
@@ -152,6 +150,19 @@ namespace HWInterface
       uint8_t reg_SPICfg;
       uint8_t reg_CS;
       uint8_t reg_SPISpeed;
+
+      struct TXRXPacket_t
+      {
+        uint8_t command;
+        uint16_t numWriteBytes;
+        uint16_t numReadBytes;
+        std::vector<uint8_t> writeData;
+        std::vector<uint8_t> readData;
+      };
+
+      Chimera::Status_t bulkTransfer(TXRXPacket_t &transfer);
+
+      Chimera::Status_t writeThenRead(TXRXPacket_t &transfer);
     };
   
   }
