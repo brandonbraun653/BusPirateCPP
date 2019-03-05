@@ -149,76 +149,6 @@ namespace HWInterface
       MODE_BIT_BANG
     };
 
-    class ModeBase
-    {
-    public:
-      /**
-       *	Returns the expected mode string that, when combined with
-       *  the mode switch command, produces the correct mode switch.
-       *
-       *	@return std::string
-       */
-      virtual std::string modeString() noexcept = 0;
-
-      /**
-       *	Gets the expected delimiter that signals the completion of a command.
-       *  It will follow some sort of pattern like:
-       *  \r\nHiZ>
-       *  \r\nSPI>
-       *  \r\nJTAG>
-       *  etc
-       *
-       *	@return std::string
-       */
-      virtual std::string delimiter() noexcept = 0;
-
-      /**
-       *	Returns the pattern used to identify the delimiter in a string
-       *
-       *	@return std::regex
-       */
-      virtual std::regex regex() noexcept = 0;
-
-      /**
-       *  Returns an enum indicating the mode
-       *
-       *  @return OperationalModes
-       */
-      virtual OperationalModes modeType() noexcept = 0;
-    };
-
-    using ModeBase_sPtr = std::shared_ptr<ModeBase>;
-
-    class HiZMode : public ModeBase
-    {
-    public:
-      HiZMode()  = default;
-      ~HiZMode() = default;
-
-      std::string modeString() noexcept override;
-
-      std::string delimiter() noexcept override;
-
-      std::regex regex() noexcept override;
-
-      OperationalModes modeType() noexcept override;
-    };
-
-    class SPIMode : public ModeBase
-    {
-    public:
-      SPIMode()  = default;
-      ~SPIMode() = default;
-
-      std::string modeString() noexcept override;
-
-      std::string delimiter() noexcept override;
-
-      std::regex regex() noexcept override;
-
-      OperationalModes modeType() noexcept override;
-    };
-
     class Device
     {
     public:
@@ -252,16 +182,19 @@ namespace HWInterface
        */
       bool reset();
 
-
+      /**
+       *	Attempts to reset the board and validate the device info can be received properly
+       *
+       *	@return bool: True if succeeded, else false
+       */
       bool connect();
 
       /**
-       *	Checks if the device has been successfully connected
+       *	Checks if the the serial port has been opened and configured
        *
        *	@return True if connected, false if not
        */
-      bool isConnected();
-
+      bool isOpen();
 
       /**
        *	Clears the terminal interface by sending 'enter' a few times
@@ -276,21 +209,6 @@ namespace HWInterface
        *  @return struct containing the device info
        */
       Info getInfo();
-
-      /**
-       *	Figures out which mode the Bus Pirate is currently in
-       *
-       *	@return ModeTypeBase_sPtr
-       */
-      ModeBase_sPtr getSystemMode();
-
-      /**
-       *	Figures out if the device is in terminal mode or bit bang mode. Will automatically
-       *	reset bit bang mode if already in that mode.
-       *
-       *	@return HWInterface::BusPirate::InteractionMode
-       */
-      InteractionMode getInteractionMode();
 
       /**
        *	Sends a command to the device
@@ -321,7 +239,7 @@ namespace HWInterface
 
       /**
        *	Send a series of bytes to the Bus Pirate, returning the response to the user.
-       *  Most typically this is used for terminal mode that uses a regex to figure out 
+       *  Most typically this is used for terminal mode that uses a regex to figure out
        *  when the transfer has ended.
        *
        *	@param[in]	cmd         Command to be sent that ends with '\n'.
@@ -334,12 +252,19 @@ namespace HWInterface
       /**
        *	Send a series of bytes to the Bus Pirate, returning the response to the user.
        *  This version is used primarily in Bit Bang mode where the response length is known.
-       *	
+       *
        *	@param[in]	cmd         Command to be sent (does not need to end in '\n')
        *	@param[in]	length      How many bytes to read before returning
        *	@return std::vector<boost::uint8_t>
        */
-       std::vector<uint8_t> sendResponsiveCommand( const std::vector<uint8_t> &cmd, const uint32_t length ) noexcept;
+      std::vector<uint8_t> sendResponsiveCommand( const std::vector<uint8_t> &cmd, const uint32_t length ) noexcept;
+
+      /**
+       *  Resets the board and enters terminal mode
+       *
+       *	@return bool: true if success, false if not
+       */
+      bool terminalInit();
 
       /**
        *	Enters bit bang mode
@@ -357,77 +282,61 @@ namespace HWInterface
       bool bbEnterSPI();
 
       /**
+       *  Enters raw I2C mode.
+       *  Must have called bbInit() first or else this will fail.
        *
-       *
-       *	@return bool
+       *	@return bool: true if success, false if not
        */
       bool bbI2C();
 
       /**
+       *  Enters raw UART mode.
+       *  Must have called bbInit() first or else this will fail.
        *
-       *
-       *	@return bool
+       *	@return bool: true if success, false if not
        */
       bool bbUART();
 
       /**
+       *  Enters raw 1Wire mode.
+       *  Must have called bbInit() first or else this will fail.
        *
-       *
-       *	@return bool
+       *	@return bool: true if success, false if not
        */
       bool bb1Wire();
 
       /**
+       *  Enters Raw Wire mode.
+       *  Must have called bbInit() first or else this will fail.
        *
-       *
-       *	@return bool
+       *	@return bool: true if success, false if not
        */
       bool bbRawWire();
 
       /**
+       *  Enters raw JTAG mode.
+       *  Must have called bbInit() first or else this will fail.
        *
-       *
-       *	@return bool
+       *	@return bool: true if success, false if not
        */
       bool bbJTAG();
 
       /**
-       *  Performs a hardware reset of the Bus Pirate and returns to the standard
-       *  input terminal. bbInit() must be called again to re-enter bit bang mode.
-       *
-       *	@return bool: true if success, false if not
-       */
-      bool bbReset();
-
-      /**
-       *	Manually sets output/input pin configurations.
-       *  Input parameter should set (output) or clear (input) the lower 5 bits in this order:
-       *  AUX|MOSI|CLK|MISO|CS
-       *
-       *	@param[in]	cfg         The pin configuration option for the Bus Pirate
-       *	@return bool: true if success, false if not
-       */
-      bool bbCfgPins( const uint8_t &cfg );
-
-      /**
        *	Exits from whatever raw mode the user was in and goes back to bit bang mode
        *
-       *	@return bool
+       *	@return bool: true if success, false if not
        */
-      bool bbExit();
+      bool bbExitHWMode();
 
 
     protected:
       SerialDriver_sPtr serial;
-      boost::regex boost_modeRegex{ "(\r\n).+(>)" };
-      std::regex std_modeRegex{ "(\r\n).+(>)" };
+      boost::regex terminalModeRegex{ "(\r\n).+(>)" };
       static constexpr uint8_t MAX_CONNECT_ATTEMPTS = 3;
 
       Info deviceInfo;
 
       bool connectedToSerial; /**< True if the device is connected and configured over serial, false if not */
-
-      std::vector<ModeBase_sPtr> supportedModes;
       OperationalModes currentMode;
 
 
@@ -437,7 +346,7 @@ namespace HWInterface
        *
        *	@return bool: true if success, false if not
        */
-       bool resetTerminal();
+      bool resetTerminal();
 
       /**
        *	Resets the device under the assumption we are in Bit Bang root.
@@ -445,7 +354,7 @@ namespace HWInterface
        *
        *	@return bool: true if success, false if not
        */
-       bool resetBitBangRoot();
+      bool resetBitBangRoot();
 
       /**
        *	Resets the device under the assumption we are in some Bit Bang HW mode.
@@ -453,7 +362,7 @@ namespace HWInterface
        *
        *	@return bool: true if success, false if not
        */
-       bool resetBitBangHWMode();
+      bool resetBitBangHWMode();
 
     private:
     };

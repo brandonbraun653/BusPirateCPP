@@ -31,7 +31,7 @@ namespace HWInterface
 {
   namespace BusPirate
   {
-    static constexpr uint8_t CMD_ENTER_RAW_SPI   = 0x01;
+    static constexpr uint8_t CMD_ENTER_RAW_SPI = 0x01;
 
     /*------------------------------------------------
     Chip Select Options
@@ -75,26 +75,34 @@ namespace HWInterface
                                                                  SPEED_1MHz,  SPEED_2MHz,   SPEED_2_6MHz,
                                                                  SPEED_4MHz,  SPEED_8MHz,   SPEED_NOT_SUPPORTED };
 
-    using SpeedBimap_t                       = boost::bimap<uint32_t, uint8_t>;
-    static const SpeedBimap_t mapSpeedtoBits = boost::assign::list_of<SpeedBimap_t::relation>( SPEED_30kHz, 0x00 )(
-        SPEED_125kHz, 0x01 )( SPEED_250kHz, 0x02 )( SPEED_1MHz, 0x03 )( SPEED_2MHz, 0x04 )( SPEED_2_6MHz, 0x05 )(
-        SPEED_4MHz, 0x06 )( SPEED_8MHz, 0x07 )( SPEED_NOT_SUPPORTED, 0x00 );
+    // clang-format off
+    using SpeedBimap_t = boost::bimap<uint32_t, uint8_t>;
+    static const SpeedBimap_t mapSpeedtoBits = boost::assign::list_of<SpeedBimap_t::relation>
+      ( SPEED_30kHz,  0x00 )
+      ( SPEED_125kHz, 0x01 )
+      ( SPEED_250kHz, 0x02 )
+      ( SPEED_1MHz,   0x03 )
+      ( SPEED_2MHz,   0x04 )
+      ( SPEED_2_6MHz, 0x05 )
+      ( SPEED_4MHz,   0x06 )
+      ( SPEED_8MHz,   0x07 )
+      ( SPEED_NOT_SUPPORTED, 0x00 );
+    // clang-format on
 
     /*------------------------------------------------
-    SPI Write/Read Commands 
+    SPI Write/Read Commands
     ------------------------------------------------*/
     static constexpr uint8_t CMD_BULK_SPI_TXFR       = 0x10;
     static constexpr uint8_t MSK_BULK_SPI_TXFR_BYTES = 0x0F;
     static constexpr uint8_t CMD_TX_THEN_RX_MAN_CS   = 0x05;
     static constexpr uint8_t CMD_TX_THEN_RX_AUTO_CS  = 0x04;
 
-    
 
     BinarySPI::BinarySPI( Device &device ) : busPirate( device )
     {
       busPirate.open();
       systemInitialized = false;
-      csMode            = Chimera::SPI::ChipSelectMode::MANUAL;
+      csMode            = Chimera::SPI::ChipSelectMode::AUTO_AFTER_TRANSFER;
 
       /*------------------------------------------------
       Initialize the virtual registers
@@ -124,9 +132,9 @@ namespace HWInterface
         /*------------------------------------------------
         Disable the pullups to false, otherwise signals will propagate from MOSI
         into MISO when there is no load, falsely indicating a response. This software
-        was developed on v3.6 hardware and the schematics seem to indicate that 
+        was developed on v3.6 hardware and the schematics seem to indicate that
         enabling the pullups (IC3) requires an external voltage source (VEXTERN).
-        Without this, it will tie together the SPI signals via 10k resistors and 
+        Without this, it will tie together the SPI signals via 10k resistors and
         therefore generate a signal on MISO with nothing connected.
         ------------------------------------------------*/
         result |= cfgPullups( false );
@@ -167,16 +175,18 @@ namespace HWInterface
         Attempts to get the closest supported match to what the user inputted.
         ------------------------------------------------*/
         auto tmp = setClockFrequency( setupStruct.clockFrequency );
-        if (tmp == SPI::Status::CLOCK_SET_EQ || tmp == SPI::Status::CLOCK_SET_LT)
+        if ( tmp == SPI::Status::CLOCK_SET_EQ || tmp == SPI::Status::CLOCK_SET_LT )
         {
           result |= SPI::Status::OK;
+          spdlog::info( "SPI initialized" );
         }
         else
         {
           result |= SPI::Status::FAIL;
+          spdlog::error( "Failed SPI initialization" );
         }
 
-        if (result == SPI::Status::OK)
+        if ( result == SPI::Status::OK )
         {
           systemInitialized = true;
         }
@@ -189,12 +199,9 @@ namespace HWInterface
     {
       Chimera::Status_t result = SPI::Status::FAIL;
 
-      if ( busPirate.reset() )
-      {
-        busPirate.close();
-        result = SPI::Status::OK;
-        systemInitialized = false;
-      }
+      busPirate.close();
+      result            = SPI::Status::OK;
+      systemInitialized = false;
 
       return result;
     }
@@ -239,32 +246,74 @@ namespace HWInterface
     Chimera::Status_t BinarySPI::writeBytes( const uint8_t *const txBuffer, size_t length, const bool &disableCS /*= true*/,
                                              const bool &autoRelease /*= false*/, uint32_t timeoutMS /*= 10*/ ) noexcept
     {
-      Chimera::Status_t result = SPI::Status::FAIL;
+      if ( !txBuffer || !length )
+      {
+        return SPI::Status::INVALID_FUNC_PARAM;
+      }
+
       TXRXPacket_t transfer;
 
-      transfer.command = CMD_BULK_SPI_TXFR;
-      transfer.numWriteBytes = length;
-      transfer.numReadBytes = length;
-      transfer.writeData = std::vector<uint8_t>(txBuffer, txBuffer + length );
+      transfer.command       = CMD_BULK_SPI_TXFR;
+      transfer.numWriteBytes = static_cast<uint32_t>( length );
+      transfer.numReadBytes  = static_cast<uint32_t>( length );
+      transfer.writeData     = std::vector<uint8_t>( txBuffer, txBuffer + length );
 
-      setChipSelect(Chimera::GPIO::State::LOW);
-      result = bulkTransfer(transfer);
-      setChipSelect(Chimera::GPIO::State::HIGH);
-
-      return result;
+      return bulkTransfer( transfer );
     }
 
     Chimera::Status_t BinarySPI::readBytes( uint8_t *const rxBuffer, size_t length, const bool &disableCS /*= true*/,
                                             const bool &autoRelease /*= false*/, uint32_t timeoutMS /*= 10*/ ) noexcept
     {
-      return SPI::Status::NOT_SUPPORTED;
+      if ( !rxBuffer || !length )
+      {
+        return SPI::Status::INVALID_FUNC_PARAM;
+      }
+
+      Chimera::Status_t result = SPI::Status::FAIL;
+      TXRXPacket_t transfer;
+
+      transfer.command       = CMD_BULK_SPI_TXFR;
+      transfer.numWriteBytes = static_cast<uint32_t>( length );
+      transfer.numReadBytes  = static_cast<uint32_t>( length );
+      transfer.writeData     = std::vector<uint8_t>( length );
+
+      transfer.writeData.assign( length, 0 );
+
+      if ( bulkTransfer( transfer ) == SPI::Status::OK )
+      {
+        auto rxLen = std::min( length, transfer.readData.size() );
+        memcpy( rxBuffer, transfer.readData.data(), rxLen );
+        result = SPI::Status::OK;
+      }
+
+      return result;
     }
 
     Chimera::Status_t BinarySPI::readWriteBytes( const uint8_t *const txBuffer, uint8_t *const rxBuffer, size_t length,
                                                  const bool &disableCS /*= true*/, const bool &autoRelease /*= false*/,
                                                  uint32_t timeoutMS /*= 10*/ ) noexcept
     {
-      return SPI::Status::NOT_SUPPORTED;
+      if ( !txBuffer || !rxBuffer || !length )
+      {
+        return SPI::Status::INVALID_FUNC_PARAM;
+      }
+
+      Chimera::Status_t result = SPI::Status::FAIL;
+      TXRXPacket_t transfer;
+
+      transfer.command       = CMD_BULK_SPI_TXFR;
+      transfer.numWriteBytes = static_cast<uint32_t>( length );
+      transfer.numReadBytes  = static_cast<uint32_t>( length );
+      transfer.writeData     = std::vector<uint8_t>( txBuffer, txBuffer + length );
+
+      if ( bulkTransfer( transfer ) == SPI::Status::OK )
+      {
+        auto rxLen = std::min( length, transfer.readData.size() );
+        memcpy( rxBuffer, transfer.readData.data(), rxLen );
+        result = SPI::Status::OK;
+      }
+
+      return result;
     }
 
     Chimera::Status_t BinarySPI::setPeripheralMode( const Chimera::SPI::SubPeripheral &periph,
@@ -283,7 +332,7 @@ namespace HWInterface
       auto iter = std::lower_bound( sortedSPISpeeds.begin(), sortedSPISpeeds.end(), freq );
 
       /* Reset to the lowest speed if the requested value is not found */
-      if (iter == sortedSPISpeeds.end())
+      if ( iter == sortedSPISpeeds.end() )
       {
         iter = sortedSPISpeeds.begin();
       }
@@ -305,7 +354,7 @@ namespace HWInterface
         uint32_t actualClock = mapSpeedtoBits.right.find( reg_SPISpeed )->second;
 
         result = SPI::Status::CLOCK_SET_EQ;
-        if (actualClock < freq)
+        if ( actualClock < freq )
         {
           result = SPI::Status::CLOCK_SET_LT;
         }
@@ -318,7 +367,7 @@ namespace HWInterface
     {
       Chimera::Status_t result = SPI::Status::FAIL;
 
-      if (freq)
+      if ( freq )
       {
         *freq = mapSpeedtoBits.right.find( reg_SPISpeed )->second;
       }
@@ -580,35 +629,47 @@ namespace HWInterface
       std::vector<uint8_t> data;
       std::vector<uint8_t> output;
 
-      uint8_t command = transfer.command | ( (transfer.numWriteBytes - 1) & MSK_BULK_SPI_TXFR_BYTES );
-      data = std::vector<uint8_t>{ command };
-      auto out = busPirate.sendResponsiveCommand( data, 1 );
+      if ( csMode != ChipSelectMode::MANUAL )
+      {
+        setChipSelect( Chimera::GPIO::State::LOW );
+      }
 
+      /*------------------------------------------------
+      Let the Bus Pirate know how many bytes we want to transfer
+      //TODO: Support "unlimited" transfers by breaking it into pieces
+      //TODO: Add the option for AUTO_BETWEEN_TRANSFER
+      ------------------------------------------------*/
+      uint8_t command = transfer.command | ( ( transfer.numWriteBytes - 1 ) & MSK_BULK_SPI_TXFR_BYTES );
+      data            = std::vector<uint8_t>{ command };
+      auto out        = busPirate.sendResponsiveCommand( data, 1 );
+
+      /*------------------------------------------------
+      If BP responds with a success, it's prepared to do the transfer. Send the data.
+      ------------------------------------------------*/
       if ( out.size() && out[ 0 ] == BitBangCommands::success )
       {
-        //for ( auto x = 0; x < transfer.numWriteBytes; x++ )
-        //{
-        //  data[ 0 ] = transfer.writeData[ x ];
-        //  auto tmp  = busPirate.sendResponsiveCommand( data, data.size() );
-
-        //  if ( tmp.size() )
-        //  {
-        //    output.push_back( tmp[ 0 ] );
-        //  }
-        //}
-        output = busPirate.sendResponsiveCommand( transfer.writeData, transfer.writeData.size() );
+        output = busPirate.sendResponsiveCommand( transfer.writeData, static_cast<uint32_t>( transfer.writeData.size() ) );
 
         if ( output.size() )
         {
           transfer.readData = output;
-          result = SPI::Status::OK;
+          result            = SPI::Status::OK;
         }
       }
+
+      /*------------------------------------------------
+      Any state besides manual must disable the chip select line after the transfer
+      ------------------------------------------------*/
+      if ( csMode != ChipSelectMode::MANUAL )
+      {
+        setChipSelect( Chimera::GPIO::State::HIGH );
+      }
+
       return result;
     }
 
     Chimera::Status_t BinarySPI::writeThenRead( TXRXPacket_t &transfer )
-    { 
+    {
       Chimera::Status_t result = SPI::Status::FAIL;
       std::vector<uint8_t> data;
 
@@ -626,10 +687,10 @@ namespace HWInterface
       ------------------------------------------------*/
       auto out = busPirate.sendResponsiveCommand( transfer.writeData, transfer.numReadBytes + 1 );
 
-      if (out.size() && out[0] == BitBangCommands::success)
+      if ( out.size() && out[ 0 ] == BitBangCommands::success )
       {
         /* Remove the success byte from the returned data (0x01) */
-        transfer.readData = std::vector<uint8_t>(out.begin() + 1, out.end());
+        transfer.readData = std::vector<uint8_t>( out.begin() + 1, out.end() );
       }
 
       return result;

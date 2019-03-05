@@ -57,18 +57,10 @@ namespace HWInterface
 
     const std::string BitBangCommands::initSuccess = "BBIO";
 
-    /*------------------------------------------------
-    The current supported Bus Pirate operational modes
-    ------------------------------------------------*/
-    // std::array<ModeTypeBase, 2> supportedModes = { HiZMode(), SPIMode() };
-    //{ "HiZ", "1-WIRE", "UART", "I2C", "SPI", "JTAG", "RAW2WIRE", "RAW3WIRE", "PC KEYBOARD", "LCD" };
 
     Device::Device( std::string &devicePort )
     {
       serial = std::make_shared<SerialDriver>( devicePort );
-
-      supportedModes.push_back( std::make_unique<HiZMode>() );
-      supportedModes.push_back( std::make_unique<SPIMode>() );
 
       connectedToSerial = false;
       currentMode       = OperationalModes::BP_INVALID_MODE;
@@ -93,7 +85,7 @@ namespace HWInterface
         /*------------------------------------------------
         Immediately reset the board, which places the board into Terminal mode
         ------------------------------------------------*/
-        if ( connectedToSerial && reset() )
+        if ( connect() )
         {
           opened      = true;
           currentMode = OperationalModes::BP_MODE_HiZ;
@@ -123,59 +115,78 @@ namespace HWInterface
       ------------------------------------------------*/
       serial->flush();
       connectedToSerial = !( serial->end() == Status::OK );
+
+      spdlog::info( "Disconnected from Bus Pirate" );
     }
 
     bool Device::reset()
     {
-      bool devReset = resetTerminal();
+      bool devReset = false;
 
-      if ( !devReset )
+      if ( isOpen() )
       {
-        devReset = resetBitBangRoot();
+        devReset = resetTerminal();
 
         if ( !devReset )
         {
-          devReset = resetBitBangHWMode();
-        }
-      }
+          devReset = resetBitBangRoot();
 
-      /*------------------------------------------------
-      The above commands don't read out all the serial data, so make sure other
-      functions don't accidentally get interpret it as part of their response.
-      ------------------------------------------------*/
-      serial->flush();
+          if ( !devReset )
+          {
+            devReset = resetBitBangHWMode();
+          }
+        }
+
+        if ( devReset )
+        {
+          spdlog::info( "Bus Pirate reset" );
+        }
+        else
+        {
+          spdlog::error( "Failed resetting Bus Pirate device" );
+        }
+
+        /*------------------------------------------------
+        The above commands don't read out all the serial data, so make sure other
+        functions don't accidentally get interpret it as part of their response.
+        ------------------------------------------------*/
+        serial->flush();
+      }
 
       return devReset;
     }
 
     bool Device::connect()
     {
+      bool connected = false;
+
       /*------------------------------------------------
       Make sure that we can talk to the device correctly. Occasionally there will be old data in the system serial buffer that
       hasn't been cleared out yet. Boost does not provide a way to flush this, so the simple fix is just to try and read
       things out again.
       ------------------------------------------------*/
-      if ( connectedToSerial && reset() )
+      if ( reset() )
       {
         for ( auto x = 0; x < MAX_CONNECT_ATTEMPTS; x++ )
         {
           if ( getInfo().isValid )
           {
-            connectedToSerial = true;
+            connected = true;
+            spdlog::info( "Connected to Bus Pirate {}", deviceInfo.hwVer );
             break;
           }
           else
           {
-            std::cout << "Retrying connection..." << std::endl;
+            spdlog::info( "Retrying connection..." );
             boost::this_thread::sleep_for( boost::chrono::milliseconds( 500 ) );
           }
         }
       }
 
-      return false;
+      return connected;
     }
 
-    bool Device::isConnected()
+    bool Device::isOpen()
     {
       return connectedToSerial;
     }
@@ -196,7 +207,7 @@ namespace HWInterface
     {
       Info info;
 
-      if ( isConnected() && serial->flush() )
+      if ( isOpen() && serial->flush() )
       {
         std::regex numberOnlyRegex = std::regex( R"([\D])" );
         std::string cmd            = MenuCommands::info;
@@ -329,38 +340,6 @@ namespace HWInterface
       return info;
     }
 
-    ModeBase_sPtr Device::getSystemMode()
-    {
-      ModeBase_sPtr resultMode;
-
-      if ( isConnected() )
-      {
-        ///*------------------------------------------------
-        // Ping the device a few times so the returned string contains the
-        // current mode the device is in.
-        //------------------------------------------------*/
-        // std::string reportedMode;
-        // std::string cmd = MenuCommands::ping;
-
-        // for ( auto x = 0; x < 3; x++ )
-        //{
-        //  reportedMode = sendResponsiveCommand( cmd );
-        //}
-
-        ///*------------------------------------------------
-        // Parse the mode
-        //------------------------------------------------*/
-        // for ( ModeBase_sPtr &x : supportedModes )
-        //{
-        //  if ( reportedMode.find( x->modeString() ) != std::string::npos )
-        //  {
-        //    resultMode = x;
-        //  }
-        //}
-      }
-      return resultMode;
-    }
-
     void Device::sendCommand( const std::string &cmd ) noexcept
     {
       sendResponsiveCommand( cmd );
@@ -382,13 +361,13 @@ namespace HWInterface
       Flush the serial port as we don't need data from the
       previous command straying into the response from this one.
       ------------------------------------------------*/
-      if ( isConnected() )
+      if ( isOpen() )
       {
         serial->write( reinterpret_cast<const uint8_t *>( cmd.c_str() ), cmd.length() );
 
         if ( delimiter.empty() )
         {
-          serial->readUntil( readBuffer, boost_modeRegex );
+          serial->readUntil( readBuffer, terminalModeRegex );
         }
         else
         {
@@ -429,13 +408,13 @@ namespace HWInterface
     {
       std::vector<uint8_t> readBuffer;
 
-      if ( isConnected() )
+      if ( isOpen() )
       {
         serial->write( cmd.data(), cmd.size() );
 
         if ( delimiter.empty() )
         {
-          serial->readUntil( readBuffer, boost_modeRegex );
+          serial->readUntil( readBuffer, terminalModeRegex );
         }
         else
         {
@@ -444,7 +423,7 @@ namespace HWInterface
       }
       else
       {
-        spdlog::error("Could not send command. There was a problem with the serial port.");
+        spdlog::error( "Could not send command. There was a problem with the serial port." );
       }
 
       return readBuffer;
@@ -454,7 +433,7 @@ namespace HWInterface
     {
       std::vector<uint8_t> readBuffer( length );
 
-      if ( isConnected() )
+      if ( isOpen() )
       {
         serial->write( cmd.data(), cmd.size() );
         serial->read( readBuffer.data(), length );
@@ -467,12 +446,17 @@ namespace HWInterface
       return readBuffer;
     }
 
+    bool Device::terminalInit()
+    {
+      return reset();
+    }
+
     bool Device::bbInit()
     {
       bool result                        = false;
       const std::string expectedResponse = "BBIO1";
 
-      if ( reset() )
+      if ( terminalInit() )
       {
         std::vector<uint8_t> output;
         std::vector<uint8_t> initCmd;
@@ -487,6 +471,10 @@ namespace HWInterface
           currentMode = OperationalModes::BP_MODE_BIT_BANG_ROOT;
         }
       }
+      else
+      {
+        spdlog::error( "Failed entering Bit Bang mode" );
+      }
 
       return result;
     }
@@ -495,30 +483,47 @@ namespace HWInterface
     {
       bool modeEntered = false;
 
-      /*------------------------------------------------
-      Automatically transition the device to BitBang mode if not there
-      ------------------------------------------------*/
-      if ( currentMode != OperationalModes::BP_MODE_BIT_BANG_ROOT )
+      if ( isOpen() )
       {
-        bbInit();
-      }
-
-      /*------------------------------------------------
-      Transition into raw BitBang SPI mode. Success is indicated by the
-      Bus Pirate returning "SPIx" where x is the current SPI version number.
-      ------------------------------------------------*/
-      if ( currentMode == OperationalModes::BP_MODE_BIT_BANG_ROOT )
-      {
-        std::vector<uint8_t> cmd = { BitBangCommands::enterSPI };
-        auto response            = sendResponsiveCommand( cmd, boost::regex{ "(SPI)." } );
-
-        std::string strOut( response.begin(), response.end() );
-        std::string substr = "SPI";
-
-        if ( strOut.find( substr ) != std::string::npos )
+        /*------------------------------------------------
+        Automatically transition the device to BitBang mode if not there
+        ------------------------------------------------*/
+        if ( currentMode != OperationalModes::BP_MODE_BIT_BANG_ROOT )
         {
-          modeEntered = true;
+          bbInit();
         }
+
+        /*------------------------------------------------
+        Transition into raw BitBang SPI mode. Success is indicated by the
+        Bus Pirate returning "SPIx" where x is the current SPI version number.
+        ------------------------------------------------*/
+        if ( currentMode == OperationalModes::BP_MODE_BIT_BANG_ROOT )
+        {
+          std::vector<uint8_t> cmd = { BitBangCommands::enterSPI };
+          auto response            = sendResponsiveCommand( cmd, boost::regex{ "(SPI)." } );
+
+          std::string strOut( response.begin(), response.end() );
+          std::string substr = "SPI";
+
+          if ( strOut.find( substr ) != std::string::npos )
+          {
+            modeEntered = true;
+            currentMode = OperationalModes::BP_MODE_SPI_BIT_BANG;
+          }
+        }
+
+        if ( modeEntered )
+        {
+          spdlog::info( "Entered Bit Bang SPI mode" );
+        }
+        else
+        {
+          spdlog::error( "Failed entering Bit Bang SPI mode" );
+        }
+      }
+      else
+      {
+        spdlog::error( "Could not send command. There was a problem with the serial port." );
       }
 
       return modeEntered;
@@ -549,19 +554,9 @@ namespace HWInterface
       return false;
     }
 
-    bool Device::bbReset()
+    bool Device::bbExitHWMode()
     {
-      return false;
-    }
-
-    bool Device::bbCfgPins( const uint8_t &cfg )
-    {
-      return false;
-    }
-
-    bool Device::bbExit()
-    {
-      return false;
+      return resetBitBangHWMode();
     }
 
     bool Device::resetTerminal()
@@ -582,10 +577,6 @@ namespace HWInterface
       {
         devReset = true;
       }
-      else 
-      {
-        spdlog::error("Failed terminal reset");
-      }
 
       return devReset;
     }
@@ -603,10 +594,6 @@ namespace HWInterface
       if ( !devReset && bbOut.size() && ( bbOut[ 0 ] == BitBangCommands::success ) )
       {
         devReset = true;
-      }
-      else
-      {
-        spdlog::error("Failed Bit Bang root reset");
       }
 
       return devReset;
@@ -628,52 +615,8 @@ namespace HWInterface
       {
         devReset = resetBitBangRoot();
       }
-      else 
-      {
-        spdlog::error("Failed Bit Bang HW Reset");
-      }
 
       return devReset;
-    }
-
-    std::string HiZMode::modeString() noexcept
-    {
-      return std::string( "HiZ" );
-    }
-
-    std::string HiZMode::delimiter() noexcept
-    {
-      return std::string( "\r\nHiZ>" );
-    }
-
-    std::regex HiZMode::regex() noexcept
-    {
-      return std::regex( "(HiZ>)" );
-    }
-
-    HWInterface::BusPirate::OperationalModes HiZMode::modeType() noexcept
-    {
-      return OperationalModes::BP_MODE_HiZ;
-    }
-
-    std::string SPIMode::modeString() noexcept
-    {
-      return std::string( "SPI" );
-    }
-
-    std::string SPIMode::delimiter() noexcept
-    {
-      return std::string( "\r\nSPI>" );
-    }
-
-    std::regex SPIMode::regex() noexcept
-    {
-      return std::regex( "(SPI>)" );
-    }
-
-    HWInterface::BusPirate::OperationalModes SPIMode::modeType() noexcept
-    {
-      return OperationalModes::BP_MODE_SPI;
     }
 
   }  // namespace BusPirate

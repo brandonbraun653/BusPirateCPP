@@ -11,6 +11,9 @@
 /* Module Includes */
 #include "serial_driver.hpp"
 
+/* Library Includes */
+#include <spdlog/spdlog.h>
+
 /* C++ Includes */
 #include <iostream>
 #include <vector>
@@ -37,7 +40,7 @@ namespace HWInterface
   SerialDriver::SerialDriver( std::string &device, const uint32_t delay_mS ) : io(), serialPort( io ), timer( io )
   {
     serialDevice = device;
-    ioDelay_mS = delay_mS;
+    ioDelay_mS   = delay_mS;
   }
 
   Chimera::Status_t SerialDriver::begin( const Chimera::Serial::Modes txMode, const Chimera::Serial::Modes rxMode ) noexcept
@@ -110,16 +113,6 @@ namespace HWInterface
 
         serial_port_base::flow_control FLOW( static_cast<serial_port_base::flow_control::type>( flow ) );
         serialPort.set_option( FLOW );
-
-        /*------------------------------------------------
-        HW Timeouts
-        ------------------------------------------------*/
-        //#if defined(WIN32) || defined(WIN64)
-        //SERIAL_TIMEOUTS timeout;
-        //timeout.ReadTotalTimeoutConstant = 0x2c010000;
-        //timeout.WriteTotalTimeoutConstant = 0x2c010000;
-        //IOCTL_SERIAL_SET_TIMEOUTS(timeout);
-        //#endif
       }
       catch ( const boost::system::system_error & )
       {
@@ -132,10 +125,17 @@ namespace HWInterface
 
   Chimera::Status_t SerialDriver::end() noexcept
   {
-    io.reset();
-    timer.cancel();
-    serialPort.cancel();
-    serialPort.close();
+    try
+    {
+      io.reset();
+      timer.cancel();
+      serialPort.cancel();
+      serialPort.close();
+    }
+    catch ( const boost::system::system_error &err )
+    {
+      spdlog::error( "{}", err.what() );
+    }
     return Status::OK;
   }
 
@@ -229,7 +229,7 @@ namespace HWInterface
   Chimera::Status_t SerialDriver::readUntil( std::vector<uint8_t> &buffer, const boost::regex &expr,
                                              const uint32_t timeout_mS ) noexcept
   {
-    if( serialPort.is_open() )
+    if ( serialPort.is_open() )
     {
       /*------------------------------------------------
       The io_service must be reset before ruse
@@ -268,7 +268,7 @@ namespace HWInterface
 
             buffer.resize( inputStream.size(), 0 );
             boost::asio::buffer_copy( boost::asio::buffer( buffer ), inputStream.data() );
-            inputStream.consume(inputStream.size());
+            inputStream.consume( inputStream.size() );
             break;
 
           case Status::TIMEOUT:
@@ -310,7 +310,7 @@ namespace HWInterface
     /*------------------------------------------------
     Clears the input stream effectively erasing the object's cache of old data
     ------------------------------------------------*/
-    inputStream.consume(inputStream.size());
+    inputStream.consume( inputStream.size() );
 
     /*------------------------------------------------
     Platform specific serial port driver buffer clearing

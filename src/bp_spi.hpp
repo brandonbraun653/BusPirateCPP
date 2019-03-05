@@ -18,14 +18,14 @@
 
 /* BusPirate Includes */
 #include "bus_pirate.hpp"
-  
+
 
 namespace HWInterface
 {
   namespace BusPirate
   {
     /**
-     *  Supported Bus Pirate SPI Speeds 
+     *  Supported Bus Pirate SPI Speeds
      */
     enum SpiSpeed
     {
@@ -43,7 +43,6 @@ namespace HWInterface
     class BinarySPI : public Chimera::SPI::Interface
     {
     public:
-      
       /**
        *  Primary constructor for creating the SPI interface
        *
@@ -51,9 +50,9 @@ namespace HWInterface
        */
       BinarySPI( Device &device );
       ~BinarySPI() = default;
-      
+
       Chimera::Status_t init( const Chimera::SPI::Setup &setupStruct ) noexcept override;
-      
+
       Chimera::Status_t deInit() noexcept override;
 
       Chimera::Status_t setChipSelect( const Chimera::GPIO::State &value ) noexcept override;
@@ -77,69 +76,68 @@ namespace HWInterface
 
       Chimera::Status_t getClockFrequency( uint32_t *const freq ) noexcept override;
 
-      /**
-       *	Enables or disables the on-board power supplies
-       *	
-       *	@param[in]	state         Enabled (true), disabled (false)
-       *	@return Chimera::Status_t
-       */
-       Chimera::Status_t cfgPowerSupplies(const bool state);
-
-      /**
-       *	Enables or disables pullups on all pins
-       *	
-       *	@param[in]	state         Enabled (true), disabled (false)
-       *	@return Chimera::Status_t
-       */
-       Chimera::Status_t cfgPullups(const bool state);
-
-      /**
-       *	Enables or disables the Auxiliary pin
-       *	
-       *	@param[in]	state         Enabled (true), disabled (false)
-       *	@return Chimera::Status_t
-       */
-       Chimera::Status_t cfgAuxPin(const bool state);
-
-      /**
-       *	Enables or disables the chip select pin. This behavior will follow
-       *  whatever the current HiZ configuration is for the device.
-       *	
-       *	@param[in]	state         Enabled (true), disabled (false)
-       *	@return Chimera::Status_t
-       */
-       Chimera::Status_t cfgChipSelect(const bool state);
-
-      /**
-       *	Enables or disables the SPI output pins 
-       *	
-       *	@param[in]	state     True (3.3V), false (HiZ)
-       *	@return Chimera::Status_t
-       */
-       Chimera::Status_t cfgSPIPinOut(const bool state);
-
-      /**
-       *	Set the idle state of the clock signal, high or low
-       *	
-       *	@param[in]	state     Logical idle state of the clock
-       *	@return Chimera::Status_t
-       */
-       Chimera::Status_t cfgSPIClkIdle(const bool state);
-
-      /**
-       *	Set which edge the clock should be valid on.
-       *	
-       *	@param[in]	direction     Idle to Active (false), Active to Idle (true)
-       *	@return Chimera::Status_t
-       */
-       Chimera::Status_t cfgSPIClkEdge(const bool direction);
-
       Chimera::Status_t reserve( const uint32_t &timeout_ms = 0u ) override;
 
       Chimera::Status_t release( const uint32_t &timeout_ms = 0u ) override;
 
-    protected:
+      /**
+       *	Enables or disables the on-board power supplies
+       *
+       *	@param[in]	state         Enabled (true), disabled (false)
+       *	@return Chimera::Status_t
+       */
+      Chimera::Status_t cfgPowerSupplies( const bool state );
 
+      /**
+       *	Enables or disables pullups on all pins
+       *
+       *	@param[in]	state         Enabled (true), disabled (false)
+       *	@return Chimera::Status_t
+       */
+      Chimera::Status_t cfgPullups( const bool state );
+
+      /**
+       *	Enables or disables the Auxiliary pin
+       *
+       *	@param[in]	state         Enabled (true), disabled (false)
+       *	@return Chimera::Status_t
+       */
+      Chimera::Status_t cfgAuxPin( const bool state );
+
+      /**
+       *	Enables or disables the chip select pin. This behavior will follow
+       *  whatever the current HiZ configuration is for the device.
+       *
+       *	@param[in]	state         Enabled (true), disabled (false)
+       *	@return Chimera::Status_t
+       */
+      Chimera::Status_t cfgChipSelect( const bool state );
+
+      /**
+       *	Enables or disables the SPI output pins
+       *
+       *	@param[in]	state     True (3.3V), false (HiZ)
+       *	@return Chimera::Status_t
+       */
+      Chimera::Status_t cfgSPIPinOut( const bool state );
+
+      /**
+       *	Set the idle state of the clock signal, high or low
+       *
+       *	@param[in]	state     Logical idle state of the clock
+       *	@return Chimera::Status_t
+       */
+      Chimera::Status_t cfgSPIClkIdle( const bool state );
+
+      /**
+       *	Set which edge the clock should be valid on.
+       *
+       *	@param[in]	direction     Idle to Active (false), Active to Idle (true)
+       *	@return Chimera::Status_t
+       */
+      Chimera::Status_t cfgSPIClkEdge( const bool direction );
+
+    protected:
     private:
       Device &busPirate;
       Chimera::SPI::ChipSelectMode csMode;
@@ -160,12 +158,12 @@ namespace HWInterface
         std::vector<uint8_t> readData;
       };
 
-      Chimera::Status_t bulkTransfer(TXRXPacket_t &transfer);
+      Chimera::Status_t bulkTransfer( TXRXPacket_t &transfer );
 
-      Chimera::Status_t writeThenRead(TXRXPacket_t &transfer);
+      Chimera::Status_t writeThenRead( TXRXPacket_t &transfer );
     };
-  
-  }
+
+  }  // namespace BusPirate
 }  // namespace HWInterface
 
 #endif /* !BUS_PIRATE_CPP_SPI_DRIVER_HPP */

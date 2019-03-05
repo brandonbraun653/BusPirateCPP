@@ -24,14 +24,16 @@ int main()
   setup.clockFrequency = 1000000;
   setup.dataSize = Chimera::SPI::DataSize::SZ_8BIT;
 
-  std::vector<uint8_t> someData = { 0xaa, 0x11, 0x22, 0x33, 0x44 };
+  std::array<uint8_t, 5> writeData = { 0xaa, 0x11, 0x22, 0x33, 0x44 };
+  std::array<uint8_t, 5> readData;
 
   if (spi.init(setup) == Status::OK )
   {
-    spi.setChipSelect(Chimera::GPIO::State::LOW);
-    spi.setChipSelect(Chimera::GPIO::State::HI);
+    readData.fill(0);
 
-    spi.writeBytes( someData.data(), someData.size() );
+    spi.writeBytes( writeData.data(), writeData.size() );
+    spi.readBytes(readData.data(), readData.size() );
+    spi.readWriteBytes(writeData.data(), readData.data(), writeData.size() );
   }
 
   spi.deInit();
