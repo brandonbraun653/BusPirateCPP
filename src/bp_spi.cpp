@@ -111,10 +111,29 @@ namespace HWInterface
 
       if ( busPirate.bbInit() && busPirate.bbEnterSPI() )
       {
-        result = cfgPowerSupplies( true );
+        /*------------------------------------------------
+        Default power off the supplies as we don't want to accidentally damage something
+        ------------------------------------------------*/
+        result = cfgPowerSupplies( false );
 
+        /*------------------------------------------------
+        Enable all the pins as outputs
+        ------------------------------------------------*/
         result |= cfgSPIPinOut( true );
-        result |= cfgPullups( true );
+
+        /*------------------------------------------------
+        Disable the pullups to false, otherwise signals will propagate from MOSI
+        into MISO when there is no load, falsely indicating a response. This software
+        was developed on v3.6 hardware and the schematics seem to indicate that 
+        enabling the pullups (IC3) requires an external voltage source (VEXTERN).
+        Without this, it will tie together the SPI signals via 10k resistors and 
+        therefore generate a signal on MISO with nothing connected.
+        ------------------------------------------------*/
+        result |= cfgPullups( false );
+
+        /*------------------------------------------------
+        The chip select line follows whatever configuration is set by cfgSPIPinOut.
+        ------------------------------------------------*/
         result |= cfgChipSelect( true );
         result |= setChipSelect( State::HI );
 
@@ -144,6 +163,9 @@ namespace HWInterface
             break;
         }
 
+        /*------------------------------------------------
+        Attempts to get the closest supported match to what the user inputted.
+        ------------------------------------------------*/
         auto tmp = setClockFrequency( setupStruct.clockFrequency );
         if (tmp == SPI::Status::CLOCK_SET_EQ || tmp == SPI::Status::CLOCK_SET_LT)
         {
@@ -225,7 +247,9 @@ namespace HWInterface
       transfer.numReadBytes = length;
       transfer.writeData = std::vector<uint8_t>(txBuffer, txBuffer + length );
 
+      setChipSelect(Chimera::GPIO::State::LOW);
       result = bulkTransfer(transfer);
+      setChipSelect(Chimera::GPIO::State::HIGH);
 
       return result;
     }
@@ -556,26 +580,28 @@ namespace HWInterface
       std::vector<uint8_t> data;
       std::vector<uint8_t> output;
 
-      uint8_t command = transfer.command | ( transfer.numWriteBytes & MSK_BULK_SPI_TXFR_BYTES );
+      uint8_t command = transfer.command | ( (transfer.numWriteBytes - 1) & MSK_BULK_SPI_TXFR_BYTES );
       data = std::vector<uint8_t>{ command };
       auto out = busPirate.sendResponsiveCommand( data, 1 );
 
       if ( out.size() && out[ 0 ] == BitBangCommands::success )
       {
-        for ( auto x = 0; x < transfer.numWriteBytes; x++ )
-        {
-          data[ 0 ] = transfer.writeData[ x ];
-          auto tmp  = busPirate.sendResponsiveCommand( data, data.size() );
+        //for ( auto x = 0; x < transfer.numWriteBytes; x++ )
+        //{
+        //  data[ 0 ] = transfer.writeData[ x ];
+        //  auto tmp  = busPirate.sendResponsiveCommand( data, data.size() );
 
-          if ( tmp.size() )
-          {
-            output.push_back( tmp[ 0 ] );
-          }
-        }
+        //  if ( tmp.size() )
+        //  {
+        //    output.push_back( tmp[ 0 ] );
+        //  }
+        //}
+        output = busPirate.sendResponsiveCommand( transfer.writeData, transfer.writeData.size() );
 
         if ( output.size() )
         {
           transfer.readData = output;
+          result = SPI::Status::OK;
         }
       }
       return result;
