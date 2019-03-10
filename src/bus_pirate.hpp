@@ -157,6 +157,7 @@ namespace HWInterface
       friend class UART;
 
       Device( std::string &devicePort );
+      Device() = default;
       ~Device() = default;
 
       /**

@@ -49,6 +49,8 @@ namespace HWInterface
        *  @param[in]  device    An instance of the low level hardware interface to the Bus Pirate
        */
       BinarySPI( Device &device );
+
+      BinarySPI() = default;
       ~BinarySPI() = default;
 
       Chimera::Status_t init( const Chimera::SPI::Setup &setupStruct ) noexcept override;
@@ -59,26 +61,22 @@ namespace HWInterface
 
       Chimera::Status_t setChipSelectControlMode( const Chimera::SPI::ChipSelectMode &mode ) noexcept override;
 
-      Chimera::Status_t writeBytes( const uint8_t *const txBuffer, size_t length, const bool &disableCS = true,
-                                    const bool &autoRelease = false, uint32_t timeoutMS = 10 ) noexcept override;
+      Chimera::Status_t writeBytes( const uint8_t *const txBuffer, const size_t length, const uint32_t timeoutMS = 10 ) noexcept override;
 
-      Chimera::Status_t readBytes( uint8_t *const rxBuffer, size_t length, const bool &disableCS = true,
-                                   const bool &autoRelease = false, uint32_t timeoutMS = 10 ) noexcept override;
+      Chimera::Status_t readBytes( uint8_t *const rxBuffer, const size_t length, const uint32_t timeoutMS = 10 ) noexcept override;
 
-      Chimera::Status_t readWriteBytes( const uint8_t *const txBuffer, uint8_t *const rxBuffer, size_t length,
-                                        const bool &disableCS = true, const bool &autoRelease = false,
-                                        uint32_t timeoutMS = 10 ) noexcept override;
+      Chimera::Status_t readWriteBytes( const uint8_t *const txBuffer, uint8_t *const rxBuffer, const size_t length, const uint32_t timeoutMS = 10 ) noexcept override;
 
-      Chimera::Status_t setPeripheralMode( const Chimera::SPI::SubPeripheral &periph,
-                                           const Chimera::SPI::SubPeripheralMode &mode ) noexcept override;
+      Chimera::Status_t setPeripheralMode( const Chimera::SPI::SubPeripheral periph,
+                                           const Chimera::SPI::SubPeripheralMode mode ) noexcept override;
 
-      Chimera::Status_t setClockFrequency( const uint32_t &freq ) noexcept override;
+      Chimera::Status_t setClockFrequency( const uint32_t freq, const uint32_t tolerance ) noexcept override;
 
-      Chimera::Status_t getClockFrequency( uint32_t *const freq ) noexcept override;
+      Chimera::Status_t getClockFrequency( uint32_t &freq ) noexcept override;
 
-      Chimera::Status_t reserve( const uint32_t &timeout_ms = 0u ) override;
+      Chimera::Status_t reserve( const uint32_t timeout_ms = 0u ) override;
 
-      Chimera::Status_t release( const uint32_t &timeout_ms = 0u ) override;
+      Chimera::Status_t release( const uint32_t timeout_ms = 0u ) override;
 
       /**
        *	Enables or disables the on-board power supplies
@@ -139,7 +137,7 @@ namespace HWInterface
 
     protected:
     private:
-      Device &busPirate;
+      Device busPirate;
       Chimera::SPI::ChipSelectMode csMode;
 
       bool systemInitialized;

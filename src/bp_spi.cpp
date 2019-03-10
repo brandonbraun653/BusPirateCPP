@@ -174,7 +174,7 @@ namespace HWInterface
         /*------------------------------------------------
         Attempts to get the closest supported match to what the user inputted.
         ------------------------------------------------*/
-        auto tmp = setClockFrequency( setupStruct.clockFrequency );
+        auto tmp = setClockFrequency( setupStruct.clockFrequency, 0 );
         if ( tmp == SPI::Status::CLOCK_SET_EQ || tmp == SPI::Status::CLOCK_SET_LT )
         {
           result |= SPI::Status::OK;
@@ -243,38 +243,37 @@ namespace HWInterface
       return SPI::Status::OK;
     }
 
-    Chimera::Status_t BinarySPI::writeBytes( const uint8_t *const txBuffer, size_t length, const bool &disableCS /*= true*/,
-                                             const bool &autoRelease /*= false*/, uint32_t timeoutMS /*= 10*/ ) noexcept
+    Chimera::Status_t BinarySPI::writeBytes( const uint8_t *const txBuffer, const size_t length,
+                                             const uint32_t timeoutMS ) noexcept
     {
       if ( !txBuffer || !length )
       {
-        return SPI::Status::INVALID_FUNC_PARAM;
+        return SPI::Status::INVAL_FUNC_PARAM;
       }
 
       TXRXPacket_t transfer;
 
       transfer.command       = CMD_BULK_SPI_TXFR;
-      transfer.numWriteBytes = static_cast<uint32_t>( length );
-      transfer.numReadBytes  = static_cast<uint32_t>( length );
+      transfer.numWriteBytes = static_cast<uint16_t>( length );
+      transfer.numReadBytes  = static_cast<uint16_t>( length );
       transfer.writeData     = std::vector<uint8_t>( txBuffer, txBuffer + length );
 
       return bulkTransfer( transfer );
     }
 
-    Chimera::Status_t BinarySPI::readBytes( uint8_t *const rxBuffer, size_t length, const bool &disableCS /*= true*/,
-                                            const bool &autoRelease /*= false*/, uint32_t timeoutMS /*= 10*/ ) noexcept
+    Chimera::Status_t BinarySPI::readBytes( uint8_t *const rxBuffer, const size_t length, const uint32_t timeoutMS ) noexcept
     {
       if ( !rxBuffer || !length )
       {
-        return SPI::Status::INVALID_FUNC_PARAM;
+        return SPI::Status::INVAL_FUNC_PARAM;
       }
 
       Chimera::Status_t result = SPI::Status::FAIL;
       TXRXPacket_t transfer;
 
       transfer.command       = CMD_BULK_SPI_TXFR;
-      transfer.numWriteBytes = static_cast<uint32_t>( length );
-      transfer.numReadBytes  = static_cast<uint32_t>( length );
+      transfer.numWriteBytes = static_cast<uint16_t>( length );
+      transfer.numReadBytes  = static_cast<uint16_t>( length );
       transfer.writeData     = std::vector<uint8_t>( length );
 
       transfer.writeData.assign( length, 0 );
@@ -289,21 +288,20 @@ namespace HWInterface
       return result;
     }
 
-    Chimera::Status_t BinarySPI::readWriteBytes( const uint8_t *const txBuffer, uint8_t *const rxBuffer, size_t length,
-                                                 const bool &disableCS /*= true*/, const bool &autoRelease /*= false*/,
-                                                 uint32_t timeoutMS /*= 10*/ ) noexcept
+    Chimera::Status_t BinarySPI::readWriteBytes( const uint8_t *const txBuffer, uint8_t *const rxBuffer, const size_t length,
+                                                 const uint32_t timeoutMS ) noexcept
     {
       if ( !txBuffer || !rxBuffer || !length )
       {
-        return SPI::Status::INVALID_FUNC_PARAM;
+        return SPI::Status::INVAL_FUNC_PARAM;
       }
 
       Chimera::Status_t result = SPI::Status::FAIL;
       TXRXPacket_t transfer;
 
       transfer.command       = CMD_BULK_SPI_TXFR;
-      transfer.numWriteBytes = static_cast<uint32_t>( length );
-      transfer.numReadBytes  = static_cast<uint32_t>( length );
+      transfer.numWriteBytes = static_cast<uint16_t>( length );
+      transfer.numReadBytes  = static_cast<uint16_t>( length );
       transfer.writeData     = std::vector<uint8_t>( txBuffer, txBuffer + length );
 
       if ( bulkTransfer( transfer ) == SPI::Status::OK )
@@ -316,13 +314,13 @@ namespace HWInterface
       return result;
     }
 
-    Chimera::Status_t BinarySPI::setPeripheralMode( const Chimera::SPI::SubPeripheral &periph,
-                                                    const Chimera::SPI::SubPeripheralMode &mode ) noexcept
+    Chimera::Status_t BinarySPI::setPeripheralMode( const Chimera::SPI::SubPeripheral periph,
+                                                    const Chimera::SPI::SubPeripheralMode mode ) noexcept
     {
       return SPI::Status::NOT_SUPPORTED;
     }
 
-    Chimera::Status_t BinarySPI::setClockFrequency( const uint32_t &freq ) noexcept
+    Chimera::Status_t BinarySPI::setClockFrequency( const uint32_t freq, const uint32_t tolerance ) noexcept
     {
       Chimera::Status_t result = SPI::Status::FAIL;
 
@@ -363,14 +361,11 @@ namespace HWInterface
       return result;
     }
 
-    Chimera::Status_t BinarySPI::getClockFrequency( uint32_t *const freq ) noexcept
+    Chimera::Status_t BinarySPI::getClockFrequency( uint32_t &freq ) noexcept
     {
-      Chimera::Status_t result = SPI::Status::FAIL;
+      Chimera::Status_t result = SPI::Status::OK;
 
-      if ( freq )
-      {
-        *freq = mapSpeedtoBits.right.find( reg_SPISpeed )->second;
-      }
+      freq = mapSpeedtoBits.right.find( reg_SPISpeed )->second;
 
       return result;
     }
@@ -613,12 +608,12 @@ namespace HWInterface
       return result;
     }
 
-    Chimera::Status_t BinarySPI::reserve( const uint32_t &timeout_ms /*= 0u */ )
+    Chimera::Status_t BinarySPI::reserve( const uint32_t timeout_ms )
     {
       return SPI::Status::NOT_SUPPORTED;
     }
 
-    Chimera::Status_t BinarySPI::release( const uint32_t &timeout_ms /*= 0u */ )
+    Chimera::Status_t BinarySPI::release( const uint32_t timeout_ms )
     {
       return SPI::Status::NOT_SUPPORTED;
     }
