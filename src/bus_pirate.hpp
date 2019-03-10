@@ -158,7 +158,10 @@ namespace HWInterface
 
       Device( std::string &devicePort );
       Device() = default;
-      ~Device() = default;
+      ~Device()
+      {
+        reset();
+      }
 
       /**
        *  Opens a connection to the device. By default, clears all settings and

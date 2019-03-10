@@ -13,6 +13,9 @@
 #ifndef BUS_PIRATE_CPP_SPI_DRIVER_HPP
 #define BUS_PIRATE_CPP_SPI_DRIVER_HPP
 
+/* C++ Includes */
+#include <memory>
+
 /* Chimera Includes */
 #include <Chimera/interface.hpp>
 
@@ -39,6 +42,10 @@ namespace HWInterface
       SPEED_8MHz          = 8000000,
       SPEED_NOT_SUPPORTED = 9999999,
     };
+
+    class BinarySPI;
+    using BinarySPI_sPtr = std::shared_ptr<BinarySPI>;
+    using BinarySPI_uPtr = std::unique_ptr<BinarySPI>;
 
     class BinarySPI : public Chimera::SPI::Interface
     {

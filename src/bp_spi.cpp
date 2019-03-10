@@ -122,7 +122,7 @@ namespace HWInterface
         /*------------------------------------------------
         Default power off the supplies as we don't want to accidentally damage something
         ------------------------------------------------*/
-        result = cfgPowerSupplies( false );
+        result = cfgPowerSupplies( true );
 
         /*------------------------------------------------
         Enable all the pins as outputs
