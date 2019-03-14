@@ -120,9 +120,10 @@ namespace HWInterface
       if ( busPirate.bbInit() && busPirate.bbEnterSPI() )
       {
         /*------------------------------------------------
-        Default power off the supplies as we don't want to accidentally damage something
+        Power on the ouptut and wait a bit to let whatever is connected stabilize
         ------------------------------------------------*/
         result = cfgPowerSupplies( true );
+        Chimera::delayMilliseconds( 100 );
 
         /*------------------------------------------------
         Enable all the pins as outputs
@@ -178,7 +179,6 @@ namespace HWInterface
         if ( tmp == SPI::Status::CLOCK_SET_EQ || tmp == SPI::Status::CLOCK_SET_LT )
         {
           result |= SPI::Status::OK;
-          spdlog::info( "SPI initialized" );
         }
         else
         {
@@ -631,8 +631,6 @@ namespace HWInterface
 
       /*------------------------------------------------
       Let the Bus Pirate know how many bytes we want to transfer
-      //TODO: Support "unlimited" transfers by breaking it into pieces
-      //TODO: Add the option for AUTO_BETWEEN_TRANSFER
       ------------------------------------------------*/
       uint8_t command = transfer.command | ( ( transfer.numWriteBytes - 1 ) & MSK_BULK_SPI_TXFR_BYTES );
       data            = std::vector<uint8_t>{ command };
@@ -643,12 +641,54 @@ namespace HWInterface
       ------------------------------------------------*/
       if ( out.size() && out[ 0 ] == BitBangCommands::success )
       {
-        output = busPirate.sendResponsiveCommand( transfer.writeData, static_cast<uint32_t>( transfer.writeData.size() ) );
+        static constexpr uint8_t BULK_TRANSFER_MAX_LEN = 16;
 
-        if ( output.size() )
+        auto bytesWritten = 0;
+        auto bytesLeft = transfer.writeData.size();
+        std::vector<uint8_t> subTransfer;
+
+        result = SPI::Status::OK;
+        while ( bytesLeft && ( result == SPI::Status::OK ) )
         {
-          transfer.readData = output;
-          result            = SPI::Status::OK;
+          /*------------------------------------------------
+          Extract as many bytes as possible and transfer them
+          ------------------------------------------------*/
+          if ( bytesLeft > BULK_TRANSFER_MAX_LEN )
+          {
+            subTransfer = std::vector<uint8_t>( transfer.writeData.begin() + bytesWritten,
+                                                transfer.writeData.begin() + bytesWritten + BULK_TRANSFER_MAX_LEN );
+          }
+          else
+          {
+            subTransfer = std::vector<uint8_t>( transfer.writeData.begin() + bytesWritten,
+                                                transfer.writeData.begin() + bytesWritten + bytesLeft );
+          }
+
+          output = busPirate.sendResponsiveCommand( subTransfer, static_cast<uint32_t>( subTransfer.size() ) );
+
+          /*------------------------------------------------
+          Did we receive anything back?
+          ------------------------------------------------*/
+          if ( output.size() )
+          {
+            transfer.readData.insert(transfer.readData.end(), output.begin(), output.end());
+
+            bytesLeft -= output.size();
+            bytesWritten += output.size();
+          }
+          else
+          {
+            result = SPI::Status::FAILED_READ;
+          }
+
+          /*------------------------------------------------
+          Handle chip select options if enabled
+          ------------------------------------------------*/
+          if ( csMode == ChipSelectMode::AUTO_BETWEEN_TRANSFER )
+          {
+            setChipSelect( Chimera::GPIO::State::HIGH );
+            setChipSelect( Chimera::GPIO::State::LOW );
+          }
         }
       }
 

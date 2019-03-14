@@ -115,8 +115,6 @@ namespace HWInterface
       ------------------------------------------------*/
       serial->flush();
       connectedToSerial = !( serial->end() == Status::OK );
-
-      spdlog::info( "Disconnected from Bus Pirate" );
     }
 
     bool Device::reset()
@@ -137,11 +135,7 @@ namespace HWInterface
           }
         }
 
-        if ( devReset )
-        {
-          spdlog::info( "Bus Pirate reset" );
-        }
-        else
+        if ( !devReset )
         {
           spdlog::error( "Failed resetting Bus Pirate device" );
         }
@@ -172,13 +166,12 @@ namespace HWInterface
           if ( getInfo().isValid )
           {
             connected = true;
-            spdlog::info( "Connected to Bus Pirate {}", deviceInfo.hwVer );
             break;
           }
           else
           {
             spdlog::info( "Retrying connection..." );
-            boost::this_thread::sleep_for( boost::chrono::milliseconds( 500 ) );
+            Chimera::delayMilliseconds( 500 );
           }
         }
       }
@@ -199,7 +192,7 @@ namespace HWInterface
       for ( auto x = 0; x < 3; x++ )
       {
         serial->write( dataField, dataSize );
-        Chimera::delayMilliseconds( 100 );
+        Chimera::delayMilliseconds( 75 );
       }
     }
 
@@ -209,7 +202,7 @@ namespace HWInterface
 
       if ( isOpen() && serial->flush() )
       {
-        Chimera::delayMilliseconds(500);
+        Chimera::delayMilliseconds(100);
         serial->flush();
 
         std::regex numberOnlyRegex = std::regex( R"([\D])" );
@@ -413,6 +406,10 @@ namespace HWInterface
 
       if ( isOpen() )
       {
+        serial->flush();
+        Chimera::delayMilliseconds( 25 );
+        serial->flush();
+
         serial->write( cmd.data(), cmd.size() );
 
         if ( delimiter.empty() )
@@ -438,6 +435,11 @@ namespace HWInterface
 
       if ( isOpen() )
       {
+        serial->flush();
+        Chimera::delayMilliseconds( 25 );
+        serial->flush();
+
+
         serial->write( cmd.data(), cmd.size() );
         serial->read( readBuffer.data(), length );
       }
@@ -515,11 +517,7 @@ namespace HWInterface
           }
         }
 
-        if ( modeEntered )
-        {
-          spdlog::info( "Entered Bit Bang SPI mode" );
-        }
-        else
+        if ( !modeEntered )
         {
           spdlog::error( "Failed entering Bit Bang SPI mode" );
         }
