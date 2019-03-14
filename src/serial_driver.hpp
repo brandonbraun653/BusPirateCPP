@@ -32,7 +32,7 @@ namespace HWInterface
   class SerialDriver : public Chimera::Serial::Interface
   {
   public:
-    SerialDriver( std::string &device, const uint32_t delay_mS = 5 );
+    SerialDriver( std::string &device, const uint32_t delay_mS = 25 );
     ~SerialDriver() = default;
 
     Chimera::Status_t begin( const Chimera::Serial::Modes txMode = Chimera::Serial::Modes::BLOCKING,

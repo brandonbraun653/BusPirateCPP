@@ -209,6 +209,9 @@ namespace HWInterface
 
       if ( isOpen() && serial->flush() )
       {
+        Chimera::delayMilliseconds(500);
+        serial->flush();
+
         std::regex numberOnlyRegex = std::regex( R"([\D])" );
         std::string cmd            = MenuCommands::info;
         std::string rawOutput      = sendResponsiveCommand( cmd );
