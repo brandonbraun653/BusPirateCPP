@@ -57,7 +57,17 @@ namespace HWInterface
     Chimera::Status_t read( uint8_t *const buffer, const size_t length, const uint32_t timeout_mS = 500 ) noexcept override;
 
 
-    Chimera::Status_t readUntil( std::vector<uint8_t> &buffer, const boost::regex &expr,
+    /**
+     *	Reads data from the serial port buffer until the regex is matched or the timeout expires.
+     *  Should the regex be matched, only data up to and including the regex will be returned. Any
+     *  remaining data will be left in the internal stream buffer to be read out at a later time.
+     *	
+     *	@param[out]	buffer        The vector to read into
+     *	@param[in]	expr          The regex expression to be matched in the read stream
+     *	@param[in]	timeout_mS    How long to wait for the regex to match before aborting
+     *	@return Chimera::Status_t
+     */
+     Chimera::Status_t readUntil( std::vector<uint8_t> &buffer, const boost::regex &expr,
                                  const uint32_t timeout_mS = 500 ) noexcept;
 
     /**

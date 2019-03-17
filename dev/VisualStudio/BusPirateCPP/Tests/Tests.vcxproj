@@ -33,8 +33,32 @@
   <ImportGroup Label="PropertySheets" />
   <PropertyGroup Label="UserMacros" />
   <ItemGroup>
+    <ClCompile Include="..\..\..\..\src\bp_spi.cpp" />
+    <ClCompile Include="..\..\..\..\src\bus_pirate.cpp" />
+    <ClCompile Include="..\..\..\..\src\serial_driver.cpp" />
+    <ClCompile Include="..\..\..\..\tst\bp_test_fixtures.cpp" />
+    <ClCompile Include="..\..\..\..\tst\serial_test_init.cpp" />
+    <ClCompile Include="..\..\..\..\tst\serial_test_transfers.cpp" />
     <ClCompile Include="main.cpp" />
-    <ClCompile Include="test.cpp" />
+    <ClCompile Include="..\..\..\..\lib\Chimera\Chimera\chimera.cpp" />
+    <ClCompile Include="..\..\..\..\lib\Chimera\Chimera\logging.cpp" />
+    <ClCompile Include="..\..\..\..\lib\Chimera\Chimera\threading.cpp" />
+    <ClInclude Include="..\..\..\..\lib\Chimera\Chimera\assertion.hpp" />
+    <ClInclude Include="..\..\..\..\lib\Chimera\Chimera\chimera.hpp" />
+    <ClInclude Include="..\..\..\..\lib\Chimera\Chimera\clock.hpp" />
+    <ClInclude Include="..\..\..\..\lib\Chimera\Chimera\config.hpp" />
+    <ClInclude Include="..\..\..\..\lib\Chimera\Chimera\gpio.hpp" />
+    <ClInclude Include="..\..\..\..\lib\Chimera\Chimera\interface.hpp" />
+    <ClInclude Include="..\..\..\..\lib\Chimera\Chimera\logging.hpp" />
+    <ClInclude Include="..\..\..\..\lib\Chimera\Chimera\preprocessor.hpp" />
+    <ClInclude Include="..\..\..\..\lib\Chimera\Chimera\serial.hpp" />
+    <ClInclude Include="..\..\..\..\lib\Chimera\Chimera\spi.hpp" />
+    <ClInclude Include="..\..\..\..\lib\Chimera\Chimera\system.hpp" />
+    <ClInclude Include="..\..\..\..\lib\Chimera\Chimera\threading.hpp" />
+    <ClInclude Include="..\..\..\..\lib\Chimera\Chimera\types.hpp" />
+    <ClInclude Include="..\..\..\..\lib\Chimera\Chimera\utilities.hpp" />
+    <ClInclude Include="..\..\..\..\lib\Chimera\Chimera\watchdog.hpp" />
+    <ClInclude Include="..\..\..\..\tst\bp_test_fixtures.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\BusPirateCPP\BusPirateCPP.vcxproj">
@@ -43,6 +67,12 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\..\..\src\bp_spi.hpp" />
+    <ClInclude Include="..\..\..\..\src\bus_pirate.hpp" />
+    <ClInclude Include="..\..\..\..\src\chimeraPort.hpp" />
+    <ClInclude Include="..\..\..\..\src\serial_driver.hpp" />
   </ItemGroup>
   <ItemDefinitionGroup />
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
@@ -55,15 +85,17 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions);_SILENCE_TR1_NAMESPACE_DEPRECATION_WARNING</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions);_SILENCE_TR1_NAMESPACE_DEPRECATION_WARNING;_WIN32_WINNT=0x0501;</PreprocessorDefinitions>
       <MinimalRebuild>false</MinimalRebuild>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <WarningLevel>Level3</WarningLevel>
+      <AdditionalIncludeDirectories>$(BOOST_ROOT)/boost_1_68_0;D:\git\GitHub\BusPirateCPP\src;D:\git\GitHub\BusPirateCPP\tst;D:\git\GitHub\BusPirateCPP\lib;D:\git\GitHub\BusPirateCPP\lib\Chimera;D:\git\GitHub\BusPirateCPP\lib\spdlog\include;$(MSBuildThisFileDirectory)..\..\lib\native\include\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Console</SubSystem>
+      <AdditionalLibraryDirectories>$(BOOST_ROOT)\boost_1_68_0\stage\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -71,47 +103,53 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>X64;_DEBUG;_CONSOLE;%(PreprocessorDefinitions);_SILENCE_TR1_NAMESPACE_DEPRECATION_WARNING</PreprocessorDefinitions>
+      <PreprocessorDefinitions>X64;_DEBUG;_CONSOLE;%(PreprocessorDefinitions);_SILENCE_TR1_NAMESPACE_DEPRECATION_WARNING;_WIN32_WINNT=0x0501;</PreprocessorDefinitions>
       <MinimalRebuild>false</MinimalRebuild>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <WarningLevel>Level3</WarningLevel>
+      <AdditionalIncludeDirectories>$(BOOST_ROOT)/boost_1_68_0;D:\git\GitHub\BusPirateCPP\src;D:\git\GitHub\BusPirateCPP\tst;D:\git\GitHub\BusPirateCPP\lib;D:\git\GitHub\BusPirateCPP\lib\Chimera;D:\git\GitHub\BusPirateCPP\lib\spdlog\include;$(MSBuildThisFileDirectory)..\..\lib\native\include\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Console</SubSystem>
+      <AdditionalLibraryDirectories>$(BOOST_ROOT)\boost_1_68_0\stage\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions);_SILENCE_TR1_NAMESPACE_DEPRECATION_WARNING</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions);_SILENCE_TR1_NAMESPACE_DEPRECATION_WARNING;_WIN32_WINNT=0x0501;</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <AdditionalIncludeDirectories>$(BOOST_ROOT)/boost_1_68_0;D:\git\GitHub\BusPirateCPP\src;D:\git\GitHub\BusPirateCPP\tst;D:\git\GitHub\BusPirateCPP\lib;D:\git\GitHub\BusPirateCPP\lib\Chimera;D:\git\GitHub\BusPirateCPP\lib\spdlog\include;$(MSBuildThisFileDirectory)..\..\lib\native\include\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Console</SubSystem>
       <OptimizeReferences>true</OptimizeReferences>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <AdditionalLibraryDirectories>$(BOOST_ROOT)\boost_1_68_0\stage\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
-      <PreprocessorDefinitions>X64;NDEBUG;_CONSOLE;%(PreprocessorDefinitions);_SILENCE_TR1_NAMESPACE_DEPRECATION_WARNING</PreprocessorDefinitions>
+      <PreprocessorDefinitions>X64;NDEBUG;_CONSOLE;%(PreprocessorDefinitions);_SILENCE_TR1_NAMESPACE_DEPRECATION_WARNING;_WIN32_WINNT=0x0501;</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <AdditionalIncludeDirectories>$(BOOST_ROOT)/boost_1_68_0;D:\git\GitHub\BusPirateCPP\src;D:\git\GitHub\BusPirateCPP\tst;D:\git\GitHub\BusPirateCPP\lib;D:\git\GitHub\BusPirateCPP\lib\Chimera;D:\git\GitHub\BusPirateCPP\lib\spdlog\include;$(MSBuildThisFileDirectory)..\..\lib\native\include\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Console</SubSystem>
       <OptimizeReferences>true</OptimizeReferences>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <AdditionalLibraryDirectories>$(BOOST_ROOT)\boost_1_68_0\stage\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">

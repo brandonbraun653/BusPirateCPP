@@ -125,6 +125,8 @@ namespace HWInterface
 
   Chimera::Status_t SerialDriver::end() noexcept
   {
+    Status_t error = Status::OK;
+
     try
     {
       io.reset();
@@ -135,8 +137,10 @@ namespace HWInterface
     catch ( const boost::system::system_error &err )
     {
       spdlog::error( "{}", err.what() );
+      error = Status::FAILED_CLOSE;
     }
-    return Status::OK;
+
+    return error;
   }
 
   Chimera::Status_t SerialDriver::setBaud( const uint32_t buad ) noexcept
@@ -195,12 +199,14 @@ namespace HWInterface
         {
           case Status::RX_COMPLETE:
             timer.cancel();
+            asyncResult = Status::OK;
             break;
 
           case Status::TIMEOUT:
             serialPort.cancel();
             break;
 
+          case Status::EMPTY:
           case Status::UNKNOWN_ERROR:
             timer.cancel();
             serialPort.cancel();
@@ -269,12 +275,15 @@ namespace HWInterface
             buffer.resize( inputStream.size(), 0 );
             boost::asio::buffer_copy( boost::asio::buffer( buffer ), inputStream.data() );
             inputStream.consume( inputStream.size() );
+
+            asyncResult = Status::OK;
             break;
 
           case Status::TIMEOUT:
             serialPort.cancel();
             break;
 
+          case Status::EMPTY:
           case Status::UNKNOWN_ERROR:
             timer.cancel();
             serialPort.cancel();
@@ -342,9 +351,8 @@ namespace HWInterface
         serialPort.open( serialDevice );
       }
     }
-    catch ( const boost::system::system_error &err )
+    catch ( const boost::system::system_error & )
     {
-      std::cout << err.what() << std::endl;
       error = Status::FAILED_OPEN;
     }
 
@@ -360,13 +368,40 @@ namespace HWInterface
       asyncResult            = Status::RX_COMPLETE;
       this->bytesTransferred = bytesTransferred;
     }
+    else
+    {
+      if ( !bytesTransferred )
+      {
+        asyncResult = Status::EMPTY;
+      }
+
+      /*------------------------------------------------
+      Error 995: The I/O operation has been aborted because of either a thread exit or an application request
+      Seems to not cause an issue?
+      ------------------------------------------------*/
+      if ( error.value() != 995 )
+      {
+        spdlog::error( error.message() );
+      }
+    }
   }
 
   void SerialDriver::callback_timeoutExpired( const boost::system::error_code &error ) noexcept
   {
-    if ( !error && asyncResult == Status::RX_IN_PROGRESS )
+    if ( !error && ( asyncResult == Status::RX_IN_PROGRESS ) )
     {
       asyncResult = Status::TIMEOUT;
+    }
+    else
+    {
+      /*------------------------------------------------
+      Error 995: The I/O operation has been aborted because of either a thread exit or an application request
+      Seems to not cause an issue?
+      ------------------------------------------------*/
+      if (error.value() != 995 )
+      {
+        spdlog::error( error.message() );
+      }
     }
   }
 
