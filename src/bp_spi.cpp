@@ -12,6 +12,7 @@
 #include "bp_spi.hpp"
 
 /* C++ Includes */
+#include <array>
 #include <map>
 #include <string>
 #include <algorithm>
@@ -176,7 +177,8 @@ namespace HWInterface
         Attempts to get the closest supported match to what the user inputted.
         ------------------------------------------------*/
         auto tmp = setClockFrequency( setupStruct.clockFrequency, 0 );
-        if ( tmp == SPI::Status::CLOCK_SET_EQ || tmp == SPI::Status::CLOCK_SET_LT )
+        if ( ( tmp == SPI::Status::CLOCK_SET_EQ ) || ( tmp == SPI::Status::CLOCK_SET_LT )
+             || ( tmp == SPI::Status::CLOCK_SET_GT ) )
         {
           result |= SPI::Status::OK;
         }
@@ -325,9 +327,18 @@ namespace HWInterface
       Chimera::Status_t result = SPI::Status::FAIL;
 
       /*------------------------------------------------
-      Build the command
+      Find the lowest error clock
       ------------------------------------------------*/
-      auto iter = std::lower_bound( sortedSPISpeeds.begin(), sortedSPISpeeds.end(), freq );
+      std::array<float, sortedSPISpeeds.size()> absError;
+      absError.fill( std::numeric_limits<float>::max() );
+
+      for ( auto x = 0; x < sortedSPISpeeds.size(); x++ )
+      {
+        absError[ x ] = fabs( static_cast<float>( sortedSPISpeeds[ x ] ) - static_cast<float>( freq ) );
+      }
+
+      auto pos = std::distance( absError.begin(), std::min_element( absError.begin(), absError.end() ));
+      auto iter = sortedSPISpeeds.begin() + pos;
 
       /* Reset to the lowest speed if the requested value is not found */
       if ( iter == sortedSPISpeeds.end() )
@@ -335,8 +346,10 @@ namespace HWInterface
         iter = sortedSPISpeeds.begin();
       }
 
+      /*------------------------------------------------
+      Build the command
+      ------------------------------------------------*/
       auto bitVals = mapSpeedtoBits.left.find( *iter )->second;
-
       uint8_t command = CMD_CFG_SPEED | ( bitVals & MSK_CFG_SPEED );
 
       /*------------------------------------------------
@@ -351,10 +364,17 @@ namespace HWInterface
 
         uint32_t actualClock = mapSpeedtoBits.right.find( reg_SPISpeed )->second;
 
-        result = SPI::Status::CLOCK_SET_EQ;
-        if ( actualClock < freq )
+        if (actualClock == freq )
+        {
+          result = SPI::Status::CLOCK_SET_EQ;   
+        }
+        else if ( actualClock < freq )
         {
           result = SPI::Status::CLOCK_SET_LT;
+        }
+        else
+        {
+          result = SPI::Status::CLOCK_SET_GT;
         }
       }
 

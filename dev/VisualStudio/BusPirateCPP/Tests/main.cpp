@@ -14,5 +14,6 @@ using namespace ::testing;
 int main(int argc, char **argv)
 {
   InitGoogleTest(&argc, argv);
+  ::testing::GTEST_FLAG( filter ) = "BinarySPIFixture.*";
   return RUN_ALL_TESTS();
 }

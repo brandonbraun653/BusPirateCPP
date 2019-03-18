@@ -76,6 +76,12 @@
     <ClCompile Include="..\..\..\..\tst\serial_test_transfers.cpp">
       <Filter>tst</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\..\tst\bp_test_init.cpp">
+      <Filter>tst</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\tst\bp_test_binary_spi.cpp">
+      <Filter>tst</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

@@ -36,7 +36,9 @@
     <ClCompile Include="..\..\..\..\src\bp_spi.cpp" />
     <ClCompile Include="..\..\..\..\src\bus_pirate.cpp" />
     <ClCompile Include="..\..\..\..\src\serial_driver.cpp" />
+    <ClCompile Include="..\..\..\..\tst\bp_test_binary_spi.cpp" />
     <ClCompile Include="..\..\..\..\tst\bp_test_fixtures.cpp" />
+    <ClCompile Include="..\..\..\..\tst\bp_test_init.cpp" />
     <ClCompile Include="..\..\..\..\tst\serial_test_init.cpp" />
     <ClCompile Include="..\..\..\..\tst\serial_test_transfers.cpp" />
     <ClCompile Include="main.cpp" />

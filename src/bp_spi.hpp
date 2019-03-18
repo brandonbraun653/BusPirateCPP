@@ -57,7 +57,7 @@ namespace HWInterface
        */
       BinarySPI( Device &device );
 
-      BinarySPI() = default;
+      BinarySPI()  = default;
       ~BinarySPI() = default;
 
       Chimera::Status_t init( const Chimera::SPI::Setup &setupStruct ) noexcept override;
@@ -68,11 +68,14 @@ namespace HWInterface
 
       Chimera::Status_t setChipSelectControlMode( const Chimera::SPI::ChipSelectMode &mode ) noexcept override;
 
-      Chimera::Status_t writeBytes( const uint8_t *const txBuffer, const size_t length, const uint32_t timeoutMS = 10 ) noexcept override;
+      Chimera::Status_t writeBytes( const uint8_t *const txBuffer, const size_t length,
+                                    const uint32_t timeoutMS = 10 ) noexcept override;
 
-      Chimera::Status_t readBytes( uint8_t *const rxBuffer, const size_t length, const uint32_t timeoutMS = 10 ) noexcept override;
+      Chimera::Status_t readBytes( uint8_t *const rxBuffer, const size_t length,
+                                   const uint32_t timeoutMS = 10 ) noexcept override;
 
-      Chimera::Status_t readWriteBytes( const uint8_t *const txBuffer, uint8_t *const rxBuffer, const size_t length, const uint32_t timeoutMS = 10 ) noexcept override;
+      Chimera::Status_t readWriteBytes( const uint8_t *const txBuffer, uint8_t *const rxBuffer, const size_t length,
+                                        const uint32_t timeoutMS = 10 ) noexcept override;
 
       Chimera::Status_t setPeripheralMode( const Chimera::SPI::SubPeripheral periph,
                                            const Chimera::SPI::SubPeripheralMode mode ) noexcept override;
