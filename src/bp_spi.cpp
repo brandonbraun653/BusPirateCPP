@@ -640,51 +640,50 @@ namespace HWInterface
 
     Chimera::Status_t BinarySPI::bulkTransfer( TXRXPacket_t &transfer )
     {
-      Chimera::Status_t result = SPI::Status::FAIL;
-      std::vector<uint8_t> data;
-      std::vector<uint8_t> output;
+      Chimera::Status_t result = SPI::Status::OK;
+      static constexpr uint8_t BULK_TRANSFER_MAX_LEN = 16;
+
+      auto bytesWritten = 0;
+      auto bytesLeft    = transfer.writeData.size();
 
       if ( csMode != ChipSelectMode::MANUAL )
       {
         setChipSelect( Chimera::GPIO::State::LOW );
       }
 
-      /*------------------------------------------------
-      Let the Bus Pirate know how many bytes we want to transfer
-      ------------------------------------------------*/
-      uint8_t command = transfer.command | ( ( transfer.numWriteBytes - 1 ) & MSK_BULK_SPI_TXFR_BYTES );
-      data            = std::vector<uint8_t>{ command };
-      auto out        = busPirate.sendResponsiveCommand( data, 1 );
-
-      /*------------------------------------------------
-      If BP responds with a success, it's prepared to do the transfer. Send the data.
-      ------------------------------------------------*/
-      if ( out.size() && out[ 0 ] == BitBangCommands::success )
+      while ( bytesLeft && ( result == SPI::Status::OK ) )
       {
-        static constexpr uint8_t BULK_TRANSFER_MAX_LEN = 16;
-
-        auto bytesWritten = 0;
-        auto bytesLeft = transfer.writeData.size();
+        /*------------------------------------------------
+        Extract as many bytes as possible into the sub-transfer
+        ------------------------------------------------*/
         std::vector<uint8_t> subTransfer;
-
-        result = SPI::Status::OK;
-        while ( bytesLeft && ( result == SPI::Status::OK ) )
+        if ( bytesLeft > BULK_TRANSFER_MAX_LEN )
         {
-          /*------------------------------------------------
-          Extract as many bytes as possible and transfer them
-          ------------------------------------------------*/
-          if ( bytesLeft > BULK_TRANSFER_MAX_LEN )
-          {
-            subTransfer = std::vector<uint8_t>( transfer.writeData.begin() + bytesWritten,
-                                                transfer.writeData.begin() + bytesWritten + BULK_TRANSFER_MAX_LEN );
-          }
-          else
-          {
-            subTransfer = std::vector<uint8_t>( transfer.writeData.begin() + bytesWritten,
-                                                transfer.writeData.begin() + bytesWritten + bytesLeft );
-          }
+          /* Transfer the max number of bytes the bus pirate supports at once */
+          subTransfer = std::vector<uint8_t>( transfer.writeData.begin() + bytesWritten,
+                                              transfer.writeData.begin() + bytesWritten + BULK_TRANSFER_MAX_LEN );
+        }
+        else
+        {
+          /* Transfer only the remaining bytes (less than bus pirate max) */
+          subTransfer = std::vector<uint8_t>( transfer.writeData.begin() + bytesWritten,
+                                              transfer.writeData.begin() + bytesWritten + bytesLeft );
+        }
 
-          output = busPirate.sendResponsiveCommand( subTransfer, static_cast<uint32_t>( subTransfer.size() ) );
+        /*------------------------------------------------
+        Let the Bus Pirate know how many bytes we want to transfer.
+        0 == 1 byte TX
+        ------------------------------------------------*/
+        uint8_t command = transfer.command | ( ( subTransfer.size() - 1 ) & MSK_BULK_SPI_TXFR_BYTES );
+        auto data       = std::vector<uint8_t>{ command };
+        auto out        = busPirate.sendResponsiveCommand( data, static_cast<uint32_t>( data.size() ) );
+
+        /*------------------------------------------------
+        If BP responds with a success, it's prepared to do the transfer. Send the data.
+        ------------------------------------------------*/
+        if ( out.size() && out[ 0 ] == BitBangCommands::success )
+        {
+          auto output = busPirate.sendResponsiveCommand( subTransfer, static_cast<uint32_t>( subTransfer.size() ) );
 
           /*------------------------------------------------
           Did we receive anything back?

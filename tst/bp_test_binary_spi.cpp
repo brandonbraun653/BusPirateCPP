@@ -8,6 +8,10 @@
  *  2019 | Brandon Braun | brandonbraun653@gmail.com
  ********************************************************************************/
 
+#include <random>
+#include <algorithm>
+#include <functional>
+
 #include "bp_test_fixtures.hpp"
 
 TEST_F( BusPirateFixture, EnterBinarySPI )
@@ -81,9 +85,9 @@ TEST_F( BinarySPIFixture, ClockSetGetExact )
   /*------------------------------------------------
   Set exactly 30KHz clock
   ------------------------------------------------*/
-  uint32_t desired_clock = SPEED_30kHz;
+  uint32_t desired_clock     = SPEED_30kHz;
   uint32_t desired_tolerance = 0;
-  uint32_t actual_clock =  0;
+  uint32_t actual_clock      = 0;
 
   EXPECT_EQ( Chimera::SPI::Status::CLOCK_SET_EQ, spi->setClockFrequency( desired_clock, desired_tolerance ) );
   EXPECT_EQ( Chimera::CommonStatusCodes::OK, spi->getClockFrequency( actual_clock ) );
@@ -270,4 +274,64 @@ TEST_F( BinarySPIFixture, ClockSetGetImprecise )
   EXPECT_EQ( Chimera::SPI::Status::CLOCK_SET_LT, spi->setClockFrequency( desired_clock, desired_tolerance ) );
   EXPECT_EQ( Chimera::CommonStatusCodes::OK, spi->getClockFrequency( actual_clock ) );
   EXPECT_EQ( SPEED_8MHz, actual_clock );
+}
+
+TEST_F( BinarySPIFixture, WriteReadSmallAmount )
+{
+  using namespace HWInterface::BusPirate;
+  using namespace Chimera;
+
+  constexpr int len = 10;
+  std::array<uint8_t, len> writeData = { 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99 };
+  std::array<uint8_t, len> readData;
+  readData.fill( 0 );
+
+  EXPECT_EQ( Chimera::CommonStatusCodes::OK, spi->readWriteBytes( writeData.data(), readData.data(), len ) );
+  EXPECT_EQ( 0, memcmp( writeData.data(), readData.data(), len ) );
+}
+
+TEST_F( BinarySPIFixture, WriteReadLargeAmount )
+{
+  using namespace HWInterface::BusPirate;
+  using namespace Chimera;
+  using namespace std;
+
+  random_device rnd_device;
+  mt19937 mersenne_engine{ rnd_device() };
+  uniform_int_distribution<unsigned short> dist{ 0x00, 0xFF };
+
+  auto gen = [&dist, &mersenne_engine]() { return dist( mersenne_engine ); };
+
+  constexpr int len = 50;
+  vector<uint8_t> writeData( len );
+  generate( writeData.begin(), writeData.end(), gen );
+
+  std::array<uint8_t, len> readData;
+  readData.fill( 0 );
+
+  EXPECT_EQ( Chimera::CommonStatusCodes::OK, spi->readWriteBytes( writeData.data(), readData.data(), len ) );
+  EXPECT_EQ( 0, memcmp( writeData.data(), readData.data(), len ) );
+}
+
+TEST_F( BinarySPIFixture, WriteReadGinormousAmount )
+{
+  using namespace HWInterface::BusPirate;
+  using namespace Chimera;
+  using namespace std;
+
+  random_device rnd_device;
+  mt19937 mersenne_engine{ rnd_device() };
+  uniform_int_distribution<unsigned short> dist{ 0x00, 0xFF };
+
+  auto gen = [&dist, &mersenne_engine]() { return dist( mersenne_engine ); };
+
+  constexpr int len = 500;
+  vector<uint8_t> writeData( len );
+  generate( writeData.begin(), writeData.end(), gen );
+
+  std::array<uint8_t, len> readData;
+  readData.fill( 0 );
+
+  EXPECT_EQ( Chimera::CommonStatusCodes::OK, spi->readWriteBytes( writeData.data(), readData.data(), len ) );
+  EXPECT_EQ( 0, memcmp( writeData.data(), readData.data(), len ) );
 }
