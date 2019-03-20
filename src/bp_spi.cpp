@@ -332,7 +332,7 @@ namespace HWInterface
       std::array<float, sortedSPISpeeds.size()> absError;
       absError.fill( std::numeric_limits<float>::max() );
 
-      for ( auto x = 0; x < sortedSPISpeeds.size(); x++ )
+      for ( size_t x = 0; x < sortedSPISpeeds.size(); x++ )
       {
         absError[ x ] = fabs( static_cast<float>( sortedSPISpeeds[ x ] ) - static_cast<float>( freq ) );
       }
@@ -366,7 +366,7 @@ namespace HWInterface
 
         if (actualClock == freq )
         {
-          result = SPI::Status::CLOCK_SET_EQ;   
+          result = SPI::Status::CLOCK_SET_EQ;
         }
         else if ( actualClock < freq )
         {
